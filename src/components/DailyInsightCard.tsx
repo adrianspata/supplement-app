@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { StackInsightsResult } from "../../lib/insights";
 
 interface DailyInsightCardProps {
@@ -17,35 +17,37 @@ export function DailyInsightCard({ insights, onPressWeekly }: DailyInsightCardPr
       </View>
 
       <View style={styles.content}>
-        {/* Coverage Score */}
-        <View style={styles.scoreSection}>
-          <Text style={styles.scoreLabel}>Coverage Score</Text>
-          <View style={styles.scoreBadge}>
-            <Text style={styles.scoreValue}>{insights.coverageScore}</Text>
-            <Text style={styles.scoreMax}> / 100</Text>
+        {/* Health Summary */}
+        <Text style={styles.healthSummary}>{insights.healthSummary}</Text>
+
+        {/* What's Going Well */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>What's Going Well</Text>
+          {insights.goingWell.map((item, idx) => (
+            <View key={idx} style={styles.listItem}>
+              <Text style={styles.bulletPoint}>•</Text>
+              <Text style={styles.listText}>{item}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Focus Area */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Focus Area</Text>
+          {insights.focusArea.map((item, idx) => (
+            <View key={idx} style={styles.listItem}>
+              <Text style={styles.bulletPoint}>•</Text>
+              <Text style={styles.listText}>{item}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Recommended Action */}
+        <View style={[styles.section, styles.lastSection]}>
+          <Text style={styles.sectionTitle}>Recommended Action</Text>
+          <View style={styles.actionBadge}>
+            <Text style={styles.actionText}>{insights.recommendedAction}</Text>
           </View>
-        </View>
-
-        {/* Today's Stack */}
-        <View style={styles.row}>
-          <Text style={styles.rowTitle}>Today's Stack</Text>
-          <Text style={styles.rowText}>{insights.todayStatus}</Text>
-        </View>
-
-        {/* What Changed */}
-        <View style={styles.row}>
-          <Text style={styles.rowTitle}>What Changed?</Text>
-          {insights.whatChanged.map((change, idx) => (
-            <Text key={idx} style={styles.rowTextNeutral}>• {change}</Text>
-          ))}
-        </View>
-
-        {/* Opportunity */}
-        <View style={styles.row}>
-          <Text style={styles.rowTitle}>Opportunity</Text>
-          {insights.opportunity.map((opp, idx) => (
-            <Text key={idx} style={styles.rowTextNeutral}>• {opp}</Text>
-          ))}
         </View>
       </View>
     </View>
@@ -84,59 +86,56 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
-  scoreSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.06)",
-  },
-  scoreLabel: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1C1C1E",
-  },
-  scoreBadge: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    backgroundColor: "#1C1C1E",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-  },
-  scoreValue: {
-    fontSize: 16,
+  healthSummary: {
+    fontSize: 20,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: "#1C1C1E",
+    lineHeight: 28,
+    marginBottom: 24,
+    letterSpacing: -0.5,
   },
-  scoreMax: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#A1A1AA",
+  section: {
+    marginBottom: 20,
   },
-  row: {
-    marginBottom: 16,
+  lastSection: {
+    marginBottom: 0,
   },
-  rowTitle: {
+  sectionTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  listItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 6,
   },
-  rowText: {
+  bulletPoint: {
     fontSize: 15,
-    fontWeight: "600",
-    color: "#1C1C1E",
-    lineHeight: 22,
+    color: "#3F3F46",
+    marginRight: 8,
+    marginTop: 1,
   },
-  rowTextNeutral: {
+  listText: {
+    flex: 1,
     fontSize: 15,
     color: "#3F3F46",
     lineHeight: 22,
-    marginBottom: 4,
+  },
+  actionBadge: {
+    backgroundColor: "#1C1C1E",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  actionText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
   },
 });

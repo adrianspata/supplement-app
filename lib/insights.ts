@@ -9,6 +9,11 @@ export interface StackInsightsResult {
   weeklyActivity: number;
   mostSupported: string[];
   lessSupported: string[];
+  healthSummary: string;
+  goingWell: string[];
+  focusArea: string[];
+  recommendedAction: string;
+  goalStatus: Record<string, 'improving' | 'stable' | 'needs_attention'>;
 }
 
 export function generateStackInsights(
@@ -96,6 +101,64 @@ export function generateStackInsights(
 
   const mostSupported = Array.from(trackedGoals).filter(g => stackGoals.has(g));
 
+  // Goal Status
+  const goalStatus: Record<string, 'improving' | 'stable' | 'needs_attention'> = {};
+  trackedGoals.forEach(g => {
+    if (mostSupported.includes(g) && activeDays.size >= 4) {
+      goalStatus[g] = 'improving';
+    } else if (mostSupported.includes(g) && activeDays.size < 4) {
+      goalStatus[g] = 'stable';
+    } else if (lessCoverageGoals.includes(g)) {
+      goalStatus[g] = 'needs_attention';
+    } else {
+      goalStatus[g] = 'stable';
+    }
+  });
+
+  // Health Summary
+  let healthSummary = "Not enough data yet. Complete daily check-ins to unlock deeper insights.";
+  if (mostSupported.length > 0) {
+    healthSummary = `${formatGoalLabel(mostSupported[0])} is your strongest supported goal this week.`;
+  } else if (lessCoverageGoals.length > 0) {
+    healthSummary = `${formatGoalLabel(lessCoverageGoals[0])} remains your biggest opportunity.`;
+  } else if (activeDays.size > 2) {
+    healthSummary = "You're building consistency with your routine.";
+  }
+
+  // Going Well
+  const goingWell: string[] = [];
+  if (activeDays.size > 0) {
+    goingWell.push(`Logged supplements ${activeDays.size} day${activeDays.size > 1 ? 's' : ''} this week`);
+  }
+  if (mostSupported.length > 0) {
+    goingWell.push(`${formatGoalLabel(mostSupported[0])}-supporting stack is consistent`);
+  }
+  if (goingWell.length === 0) {
+    goingWell.push("Start building your routine to see what's going well");
+  }
+  
+  // Focus Area
+  const focusArea: string[] = [];
+  if (lessCoverageGoals.length > 0) {
+    lessCoverageGoals.slice(0, 2).forEach(g => {
+      focusArea.push(`${formatGoalLabel(g)} support is currently low`);
+    });
+  } else if (stack.length > 0) {
+    focusArea.push("All tracked goals are currently supported");
+  } else {
+    focusArea.push("Add products to your stack to support your goals");
+  }
+
+  // Recommended Action
+  let recommendedAction = "Log your supplements today";
+  if (itemsCompletedToday === totalScheduledToday && totalScheduledToday > 0) {
+    recommendedAction = "Complete today's check-in";
+  } else if (totalScheduledToday > 0) {
+    recommendedAction = "Take your next scheduled stack";
+  } else {
+    recommendedAction = "Add a product that supports your goals";
+  }
+
   return {
     coverageScore,
     todayStatus,
@@ -103,6 +166,11 @@ export function generateStackInsights(
     opportunity,
     weeklyActivity: activeDays.size,
     mostSupported,
-    lessSupported: lessCoverageGoals
+    lessSupported: lessCoverageGoals,
+    healthSummary,
+    goingWell,
+    focusArea,
+    recommendedAction,
+    goalStatus
   };
 }
