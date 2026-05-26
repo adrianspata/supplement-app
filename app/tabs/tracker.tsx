@@ -4,6 +4,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { getUserStack, getLogsForDateRange, toggleDailyLog } from "../../lib/stack";
 import { UserStackItem, DailyStackLog } from "../../lib/types";
+import { generateStackInsights } from "../../lib/insights";
+import { generateCoachInsights, CoachInsight } from "../../lib/coach";
+import { ElexirCoachCard } from "../../src/components/ElexirCoachCard";
 import { ProductRow } from "../../src/components/ProductRow";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "../../lib/auth-context";
@@ -14,6 +17,7 @@ export default function Tracker() {
   const [logs, setLogs] = useState<Record<string, DailyStackLog>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [coachInsights, setCoachInsights] = useState<CoachInsight[]>([]);
   const { userPreferences } = useAuth();
   const preferredTime = userPreferences?.reminder_time;
 
@@ -44,16 +48,18 @@ export default function Tracker() {
   const todayString = getTodayString();
 
   const loadData = async () => {
+    let currentUser: any = null;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) return;
+      currentUser = authData.user;
 
       const startDate = weekDates[0];
       const endDate = weekDates[6];
 
       const [userStack, weeklyLogs] = await Promise.all([
-        getUserStack(user.id),
-        getLogsForDateRange(user.id, startDate, endDate)
+        getUserStack(currentUser.id),
+        getLogsForDateRange(currentUser.id, startDate, endDate)
       ]);
 
       setStack(userStack);
@@ -63,6 +69,10 @@ export default function Tracker() {
         logsMap[`${log.log_date}_${log.stack_item_id}`] = log;
       });
       setLogs(logsMap);
+
+      const stackInsights = generateStackInsights(userPreferences as any, userStack, weeklyLogs);
+      const generatedInsights = generateCoachInsights(stackInsights);
+      setCoachInsights(generatedInsights);
     } catch (error: any) {
       console.error("Failed to load tracker data", error);
       Alert.alert("Error", "Could not load today's stack.");
@@ -70,8 +80,8 @@ export default function Tracker() {
       setLoading(false);
       setRefreshing(false);
       
-      if (user?.id) {
-        syncNotifications(user.id);
+      if (currentUser?.id) {
+        syncNotifications(currentUser.id);
       }
     }
   };
@@ -88,8 +98,9 @@ export default function Tracker() {
   };
 
   const handleToggle = async (item: UserStackItem) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData?.user) return;
+    const user = authData.user;
 
     const logKey = `${todayString}_${item.id}`;
     const currentLog = logs[logKey];
@@ -243,6 +254,8 @@ export default function Tracker() {
         contentContainerStyle={styles.contentContainer}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {coachInsights.length > 0 && <ElexirCoachCard insights={coachInsights} />}
+        
         {renderReminderCard()}
         
         {totalCount > 0 && (
