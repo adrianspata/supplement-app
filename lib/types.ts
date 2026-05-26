@@ -206,3 +206,14 @@ export type RecommendedProduct = {
   score: number;
   reason?: string;
 };
+
+export type DailyCheckIn = {
+  id: string;
+  user_id: string;
+  checkin_date: string;
+  sleep_score: number | null;
+  energy_score: number | null;
+  stress_score: number | null;
+  created_at: string;
+  updated_at: string;
+};
