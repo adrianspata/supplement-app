@@ -28,6 +28,8 @@ import { DailyInsightCard } from "../../src/components/DailyInsightCard";
 import { WeeklyReflection } from "../../src/components/WeeklyReflection";
 import { generateStackInsights, StackInsightsResult } from "../../lib/insights";
 import { getUserStack, getLogsForDateRange } from "../../lib/stack";
+import { GoalProgressCard } from "../../src/components/GoalProgressCard";
+import { TodayCheckInCard } from "../../src/components/TodayCheckInCard";
 
 const CATEGORIES = ["Supplements", "Vitamins", "Minerals", "Protein", "Adaptogens", "Probiotics", "Sports Nutrition", "Functional Foods", "Food Products", "Drinks", "Other"];
 const UNITS = ["capsules", "tablets", "softgels", "scoops", "g", "kg", "ml", "L", "pcs", "oz"];
@@ -251,8 +253,26 @@ export default function PantryScreen() {
 
   const renderHeader = () => (
     <View style={styles.headerSection}>
+      <GoalProgressCard 
+        goals={userPreferences?.primary_goals} 
+        goalStatus={stackInsights?.goalStatus} 
+      />
+
       <DailyInsightCard insights={stackInsights} />
       <WeeklyReflection insights={stackInsights} />
+
+      {userId && <TodayCheckInCard userId={userId} />}
+
+      {recommendedProducts.length > 0 && (
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Recommended for your goals</Text>
+          </View>
+          <View style={styles.verticalListContainer}>
+            {recommendedProducts.map(rec => renderProductRow(rec.product, rec.product.id, `rec-${rec.product.id}`, rec.reason))}
+          </View>
+        </View>
+      )}
 
       <Pressable style={styles.searchButton} onPress={() => router.push("/product-search")}>
         <Text style={styles.searchButtonIcon}>🔍</Text>
@@ -273,7 +293,7 @@ export default function PantryScreen() {
         <Text style={styles.askChevron}>›</Text>
       </Pressable>
 
-      <View style={styles.sectionContainer}>
+      <View style={[styles.sectionContainer, { marginTop: 24 }]}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Saved Products</Text>
         </View>
@@ -294,17 +314,6 @@ export default function PantryScreen() {
           )}
         </View>
       </View>
-
-      {recommendedProducts.length > 0 && (
-        <View style={[styles.sectionContainer, { marginTop: 24 }]}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Recommended for your goals</Text>
-          </View>
-          <View style={styles.verticalListContainer}>
-            {recommendedProducts.map(rec => renderProductRow(rec.product, rec.product.id, `rec-${rec.product.id}`, rec.reason))}
-          </View>
-        </View>
-      )}
 
       {recentlyViewed.length > 0 && (
         <View style={[styles.sectionContainer, { marginTop: 24 }]}>
