@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthButton } from "../../components/AuthButton";
+import { signInWithApple, signInWithGoogle } from "../../lib/auth-providers";
 
 export default function Signup() {
   const router = useRouter();
@@ -23,6 +25,10 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -75,6 +81,26 @@ export default function Signup() {
     // _layout.tsx onAuthStateChange will redirect to onboarding automatically
   }
 
+  const handleAppleSignup = async () => {
+    setAppleLoading(true);
+    const { error } = await signInWithApple();
+    setAppleLoading(false);
+    
+    if (error && error.message !== "Sign-in canceled") {
+      Alert.alert("Apple Sign-In Failed", error.message);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    setGoogleLoading(true);
+    const { error } = await signInWithGoogle();
+    setGoogleLoading(false);
+    
+    if (error && error.message !== "Authentication flow was canceled or failed.") {
+      Alert.alert("Google Sign-In Failed", error.message);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
@@ -86,86 +112,123 @@ export default function Signup() {
             <Text style={styles.backIcon}>←</Text>
           </Pressable>
 
-          <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Start your health journey today.</Text>
-
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                placeholder="name@example.com"
-                placeholderTextColor="#8E8E93"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setErrors((e) => ({ ...e, email: "" }));
-                }}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                style={[styles.input, errors.email && styles.inputError]}
-              />
-              {errors.email ? (
-                <Text style={styles.errorText}>{errors.email}</Text>
-              ) : null}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                placeholder="Minimum 8 characters"
-                placeholderTextColor="#8E8E93"
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setErrors((e) => ({ ...e, password: "" }));
-                }}
-                secureTextEntry
-                style={[styles.input, errors.password && styles.inputError]}
-              />
-              {errors.password ? (
-                <Text style={styles.errorText}>{errors.password}</Text>
-              ) : null}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <TextInput
-                placeholder="Confirm your password"
-                placeholderTextColor="#8E8E93"
-                value={confirmPassword}
-                onChangeText={(text) => {
-                  setConfirmPassword(text);
-                  setErrors((e) => ({ ...e, confirmPassword: "" }));
-                }}
-                secureTextEntry
-                style={[
-                  styles.input,
-                  errors.confirmPassword && styles.inputError,
-                ]}
-              />
-              {errors.confirmPassword ? (
-                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-              ) : null}
-            </View>
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>Create your Elexir account</Text>
+            <Text style={styles.subtitle}>
+              Track your routine, understand your progress, and build a supplement plan that works for you.
+            </Text>
           </View>
 
-          <View style={styles.footer}>
-            <Pressable
-              onPress={handleSignup}
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && { opacity: 0.9 },
-                loading && { opacity: 0.7 },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Create account</Text>
-              )}
-            </Pressable>
+          <View style={styles.authContainer}>
+            {Platform.OS === "ios" && (
+              <AuthButton
+                provider="apple"
+                onPress={handleAppleSignup}
+                loading={appleLoading}
+              />
+            )}
+            
+            <AuthButton
+              provider="google"
+              onPress={handleGoogleSignup}
+              loading={googleLoading}
+            />
 
+            {!showEmailForm && (
+              <>
+                <View style={styles.dividerContainer}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <AuthButton
+                  provider="email"
+                  onPress={() => setShowEmailForm(true)}
+                />
+              </>
+            )}
+          </View>
+
+          {showEmailForm && (
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  placeholder="name@example.com"
+                  placeholderTextColor="#8E8E93"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setErrors((e) => ({ ...e, email: "" }));
+                  }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  style={[styles.input, errors.email && styles.inputError]}
+                />
+                {errors.email ? (
+                  <Text style={styles.errorText}>{errors.email}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  placeholder="Minimum 8 characters"
+                  placeholderTextColor="#8E8E93"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setErrors((e) => ({ ...e, password: "" }));
+                  }}
+                  secureTextEntry
+                  style={[styles.input, errors.password && styles.inputError]}
+                />
+                {errors.password ? (
+                  <Text style={styles.errorText}>{errors.password}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <TextInput
+                  placeholder="Confirm your password"
+                  placeholderTextColor="#8E8E93"
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    setErrors((e) => ({ ...e, confirmPassword: "" }));
+                  }}
+                  secureTextEntry
+                  style={[
+                    styles.input,
+                    errors.confirmPassword && styles.inputError,
+                  ]}
+                />
+                {errors.confirmPassword ? (
+                  <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                ) : null}
+              </View>
+
+              <Pressable
+                onPress={handleSignup}
+                disabled={loading}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && { opacity: 0.9 },
+                  loading && { opacity: 0.7 },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Create account</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+
+          <View style={styles.footer}>
             <Pressable
               onPress={() => router.push("/auth/login")}
               style={styles.secondaryButton}
@@ -200,15 +263,41 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   backIcon: { fontSize: 20, color: "#1C1C1E" },
+  headerContainer: {
+    marginBottom: 32,
+  },
   title: {
     fontSize: 34,
     fontWeight: "800",
     color: "#1C1C1E",
     letterSpacing: -1,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  subtitle: { fontSize: 17, color: "#636366", marginBottom: 40 },
-  form: { gap: 20, marginBottom: 40 },
+  subtitle: { 
+    fontSize: 17, 
+    color: "#636366", 
+    lineHeight: 24,
+  },
+  authContainer: {
+    marginBottom: 24,
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(0,0,0,0.1)",
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 15,
+    color: "#8E8E93",
+    fontWeight: "500",
+  },
+  form: { gap: 20, marginBottom: 24 },
   inputGroup: { gap: 8 },
   label: { fontSize: 15, fontWeight: "600", color: "#1C1C1E" },
   input: {
@@ -222,15 +311,16 @@ const styles = StyleSheet.create({
   },
   inputError: { borderColor: "#FF3B30" },
   errorText: { color: "#FF3B30", fontSize: 13, fontWeight: "500" },
-  footer: { marginTop: "auto", gap: 16 },
   primaryButton: {
     backgroundColor: "#1C1C1E",
     borderRadius: 100,
     paddingVertical: 18,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 8,
   },
   primaryButtonText: { color: "#FFF", fontSize: 17, fontWeight: "700" },
+  footer: { marginTop: "auto", paddingTop: 20 },
   secondaryButton: {
     paddingVertical: 16,
     alignItems: "center",

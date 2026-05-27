@@ -21,6 +21,7 @@ function RootGuard() {
   const navigationState = useRootNavigationState();
 
   useEffect(() => {
+    console.log("[RootGuard] State Update -> initialized:", initialized, "session:", !!session, "onboardingCompleted:", onboardingCompleted, "segments:", segments);
     // Wait until navigation is ready AND our async data is resolved
     if (!initialized || !navigationState?.key) return;
 
@@ -29,6 +30,7 @@ function RootGuard() {
     const inTabs = segments[0] === "tabs";
 
     if (!session) {
+      console.log("[RootGuard] No session, routing to auth");
       // Not logged in → auth screens only
       if (!inAuthGroup) {
         router.replace("/auth/signup");
@@ -37,14 +39,19 @@ function RootGuard() {
     }
 
     // Logged in but onboarding status not yet loaded — do nothing (show loading)
-    if (onboardingCompleted === null) return;
+    if (onboardingCompleted === null) {
+      console.log("[RootGuard] Session exists but onboardingCompleted is null, waiting...");
+      return;
+    }
 
     if (onboardingCompleted) {
+      console.log("[RootGuard] Onboarding complete, routing to tabs");
       // Onboarding done → redirect away from auth/onboarding/index into tabs
       if (inAuthGroup || isOnboarding || (!inTabs && segments.length === 0)) {
         router.replace("/tabs/pantry");
       }
     } else {
+      console.log("[RootGuard] Onboarding NOT complete, routing to onboarding");
       // Onboarding not done → force to onboarding
       if (!isOnboarding) {
         router.replace("/onboarding");

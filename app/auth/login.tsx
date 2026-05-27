@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View, StyleSheet, ActivityIndicator, Platform, KeyboardAvoidingView, ScrollView } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthButton } from "../../components/AuthButton";
+import { signInWithApple, signInWithGoogle } from "../../lib/auth-providers";
 
 export default function Login() {
     const router = useRouter();
@@ -11,6 +13,10 @@ export default function Login() {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
+    
+    const [showEmailForm, setShowEmailForm] = useState(false);
+    const [appleLoading, setAppleLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
 
     async function handleLogin() {
         if (!email || !password) {
@@ -34,6 +40,26 @@ export default function Login() {
         // RootLayout will handle the redirect based on session & onboarding status
     }
 
+    const handleAppleLogin = async () => {
+      setAppleLoading(true);
+      const { error } = await signInWithApple();
+      setAppleLoading(false);
+      
+      if (error && error.message !== "Sign-in canceled") {
+        Alert.alert("Apple Sign-In Failed", error.message);
+      }
+    };
+  
+    const handleGoogleLogin = async () => {
+      setGoogleLoading(true);
+      const { error } = await signInWithGoogle();
+      setGoogleLoading(false);
+      
+      if (error && error.message !== "Authentication flow was canceled or failed.") {
+        Alert.alert("Google Sign-In Failed", error.message);
+      }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
             <KeyboardAvoidingView 
@@ -45,59 +71,94 @@ export default function Login() {
                         <Text style={styles.backIcon}>←</Text>
                     </Pressable>
 
-                    <Text style={styles.title}>Welcome back</Text>
-                    <Text style={styles.subtitle}>Log in to continue your journey.</Text>
-
-                    <View style={styles.form}>
-                        {errorMsg ? (
-                            <View style={styles.errorBox}>
-                                <Text style={styles.errorBoxText}>{errorMsg}</Text>
-                            </View>
-                        ) : null}
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Email</Text>
-                            <TextInput
-                                placeholder="name@example.com"
-                                placeholderTextColor="#8E8E93"
-                                value={email}
-                                onChangeText={(text) => { setEmail(text); setErrorMsg(''); }}
-                                autoCapitalize="none"
-                                keyboardType="email-address"
-                                style={styles.input}
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Password</Text>
-                            <TextInput
-                                placeholder="Enter your password"
-                                placeholderTextColor="#8E8E93"
-                                value={password}
-                                onChangeText={(text) => { setPassword(text); setErrorMsg(''); }}
-                                secureTextEntry
-                                style={styles.input}
-                            />
-                        </View>
+                    <View style={styles.headerContainer}>
+                      <Text style={styles.title}>Welcome back</Text>
+                      <Text style={styles.subtitle}>Log in to continue your journey.</Text>
                     </View>
 
-                    <View style={styles.footer}>
-                        <Pressable
-                            onPress={handleLogin}
-                            disabled={loading}
-                            style={({ pressed }) => [
-                                styles.primaryButton, 
-                                pressed && { opacity: 0.9 },
-                                loading && { opacity: 0.7 }
-                            ]}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color="#FFF" />
-                            ) : (
-                                <Text style={styles.primaryButtonText}>Log in</Text>
-                            )}
-                        </Pressable>
+                    <View style={styles.authContainer}>
+                      {Platform.OS === "ios" && (
+                        <AuthButton
+                          provider="apple"
+                          onPress={handleAppleLogin}
+                          loading={appleLoading}
+                        />
+                      )}
+                      
+                      <AuthButton
+                        provider="google"
+                        onPress={handleGoogleLogin}
+                        loading={googleLoading}
+                      />
 
+                      {!showEmailForm && (
+                        <>
+                          <View style={styles.dividerContainer}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>or</Text>
+                            <View style={styles.dividerLine} />
+                          </View>
+
+                          <AuthButton
+                            provider="email"
+                            onPress={() => setShowEmailForm(true)}
+                          />
+                        </>
+                      )}
+                    </View>
+
+                    {showEmailForm && (
+                      <View style={styles.form}>
+                          {errorMsg ? (
+                              <View style={styles.errorBox}>
+                                  <Text style={styles.errorBoxText}>{errorMsg}</Text>
+                              </View>
+                          ) : null}
+
+                          <View style={styles.inputGroup}>
+                              <Text style={styles.label}>Email</Text>
+                              <TextInput
+                                  placeholder="name@example.com"
+                                  placeholderTextColor="#8E8E93"
+                                  value={email}
+                                  onChangeText={(text) => { setEmail(text); setErrorMsg(''); }}
+                                  autoCapitalize="none"
+                                  keyboardType="email-address"
+                                  style={styles.input}
+                              />
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                              <Text style={styles.label}>Password</Text>
+                              <TextInput
+                                  placeholder="Enter your password"
+                                  placeholderTextColor="#8E8E93"
+                                  value={password}
+                                  onChangeText={(text) => { setPassword(text); setErrorMsg(''); }}
+                                  secureTextEntry
+                                  style={styles.input}
+                              />
+                          </View>
+                          
+                          <Pressable
+                              onPress={handleLogin}
+                              disabled={loading}
+                              style={({ pressed }) => [
+                                  styles.primaryButton, 
+                                  pressed && { opacity: 0.9 },
+                                  loading && { opacity: 0.7 }
+                              ]}
+                          >
+                              {loading ? (
+                                  <ActivityIndicator color="#FFF" />
+                              ) : (
+                                  <Text style={styles.primaryButtonText}>Log in</Text>
+                              )}
+                          </Pressable>
+                      </View>
+                    )}
+
+                    <View style={styles.footer}>
                         <Pressable 
                             onPress={() => router.push("/auth/signup")}
                             style={styles.secondaryButton}
@@ -137,6 +198,9 @@ const styles = StyleSheet.create({
         fontSize: 20,
         color: '#1C1C1E',
     },
+    headerContainer: {
+        marginBottom: 32,
+    },
     title: {
         fontSize: 34,
         fontWeight: '800',
@@ -147,11 +211,30 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: 17,
         color: '#636366',
-        marginBottom: 40,
+        lineHeight: 24,
+    },
+    authContainer: {
+      marginBottom: 24,
+    },
+    dividerContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginVertical: 16,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: "rgba(0,0,0,0.1)",
+    },
+    dividerText: {
+      marginHorizontal: 16,
+      fontSize: 15,
+      color: "#8E8E93",
+      fontWeight: "500",
     },
     form: {
         gap: 20,
-        marginBottom: 40,
+        marginBottom: 24,
     },
     errorBox: {
         backgroundColor: '#FFEBEA',
@@ -183,7 +266,7 @@ const styles = StyleSheet.create({
     },
     footer: {
         marginTop: 'auto',
-        gap: 16,
+        paddingTop: 20,
     },
     primaryButton: {
         backgroundColor: '#1C1C1E',
@@ -191,6 +274,7 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
         alignItems: 'center',
         justifyContent: 'center',
+        marginTop: 8,
     },
     primaryButtonText: {
         color: '#FFF',
