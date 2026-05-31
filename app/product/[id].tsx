@@ -1,44 +1,55 @@
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
   ActivityIndicator,
-  Pressable,
-  Image,
-  ScrollView,
   Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { supabase } from "../../lib/supabase";
-import { getProductById, getSavedProducts, saveProduct, unsaveProduct, markProductAsViewed, getSimilarProducts } from "../../lib/products";
-import { Product, UserSavedProduct } from "../../lib/types";
 import { useAuth } from "../../lib/auth-context";
 import { calculateMatch, generateWhyItMatches } from "../../lib/matching";
+import { formatBrandName, formatCategory, formatGoalLabel, formatIngredientName, formatProductName, formatQualityAttribute, getProductImageFallback, shouldDisplayField } from "../../lib/productDisplay";
+import { getProductById, getSavedProducts, getSimilarProducts, markProductAsViewed, saveProduct, unsaveProduct } from "../../lib/products";
 import { calculateElexirScore } from "../../lib/scoring";
-import { addToStack } from "../../lib/stack";
-import { StackTiming } from "../../lib/types";
-import { formatCategory, formatProductName, formatBrandName, formatGoalLabel, formatQualityAttribute, formatIngredientName, shouldDisplayField, getProductImageFallback } from "../../lib/productDisplay";
+import { addToStack, getUserStack } from "../../lib/stack";
+import { supabase } from "../../lib/supabase";
+import { Product, StackTiming, UserSavedProduct } from "../../lib/types";
 import { ProductCompareRow } from "../../src/components/ProductCompareRow";
+import { PremiumButton } from "../../src/components/ui/PremiumButton";
+import { SurfaceCard } from "../../src/components/ui/SurfaceCard";
+import { BlurLevels, BorderRadii, Colors, Shadows, Spacing } from "../../src/constants/theme";
+import { useColorScheme } from "../../src/hooks/use-color-scheme";
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const scheme = useColorScheme();
+  const colorScheme = scheme === "dark" ? "dark" : "light";
+  const themeColors = Colors[colorScheme];
+
   const { userPreferences } = useAuth();
-  
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [savedProducts, setSavedProducts] = useState<UserSavedProduct[]>([]);
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [inStack, setInStack] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error && data?.user) {
         setUserId(data.user.id);
         fetchSavedProducts(data.user.id);
+        fetchUserStack(data.user.id);
       }
     });
   }, []);
@@ -58,6 +69,14 @@ export default function ProductDetailScreen() {
   const fetchSavedProducts = async (uid: string) => {
     const saved = await getSavedProducts(uid);
     setSavedProducts(saved);
+  };
+
+  const fetchUserStack = async (uid: string) => {
+    const stack = await getUserStack(uid);
+    if (id) {
+      const isAdded = stack.some(item => item.product_id === id);
+      setInStack(isAdded);
+    }
   };
 
   const fetchProduct = async (productId: string) => {
@@ -91,6 +110,7 @@ export default function ProductDetailScreen() {
     if (!userId || !product) return;
     try {
       await addToStack(userId, product.id, timing);
+      setInStack(true);
       Alert.alert("Added to Stack", `This product has been added to your ${timing.replace("_", " ")} routine.`);
     } catch (error) {
       console.error("Error adding to stack:", error);
@@ -119,19 +139,17 @@ export default function ProductDetailScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1C1C1E" />
+      <View style={[styles.centerContainer, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator size="small" color={themeColors.text} />
       </View>
     );
   }
 
   if (!product) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <Text style={styles.errorText}>Product not found.</Text>
-        <Pressable style={styles.backButtonEmpty} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </Pressable>
+      <SafeAreaView style={[styles.centerContainer, { backgroundColor: themeColors.background }]}>
+        <Text style={[styles.errorText, { color: themeColors.text }]}>Product not found.</Text>
+        <PremiumButton title="Go Back" onPress={() => router.back()} style={{ width: 120 }} />
       </SafeAreaView>
     );
   }
@@ -139,7 +157,7 @@ export default function ProductDetailScreen() {
   const ingredients = product.product_ingredients || [];
   const productGoals = product.product_goals?.length ? product.product_goals.map(g => g.goal) : (product.inferred_goals || []);
   const attributes = product.product_quality_attributes?.map(a => a.attribute) || [];
-  
+
   const match = calculateMatch(userPreferences?.primary_goals, userPreferences?.health_concerns, productGoals);
   const elexir = calculateElexirScore(product);
 
@@ -150,19 +168,19 @@ export default function ProductDetailScreen() {
     fish: ["fish", "fish oil", "omega-3 from fish", "cod liver oil"],
     shellfish: ["shellfish", "shrimp", "crab", "lobster", "prawn"]
   };
-  
+
   const userAllergies = userPreferences?.allergies || [];
   const foundAllergies = new Set<string>();
-  
+
   userAllergies.forEach(userAllergy => {
     const normalized = userAllergy.toLowerCase().trim();
     const synonyms = ALLERGY_SYNONYMS[normalized] || [normalized];
-    
+
     ingredients.forEach(pi => {
       const ingName = (pi.ingredient?.name || "").toLowerCase();
       const ingDesc = (pi.ingredient?.description || "").toLowerCase();
       const ingForm = (pi.form || "").toLowerCase();
-      
+
       synonyms.forEach(syn => {
         if (ingName.includes(syn) || ingDesc.includes(syn) || ingForm.includes(syn)) {
           foundAllergies.add(normalized);
@@ -185,351 +203,296 @@ export default function ProductDetailScreen() {
   const isAdvanced = userPreferences?.health_knowledge_level === 'advanced';
   const isBeginner = userPreferences?.health_knowledge_level === 'beginner';
   const formattedGoalsList = productGoals.length > 0 ? productGoals.map(formatGoalLabel).filter(Boolean).join(", ") : "your daily wellness routine";
-  
-  const introText = isAdvanced 
+
+  const introText = isAdvanced
     ? `The specific compounds in this formulation are designed to support ${formattedGoalsList}.`
-    : isBeginner 
+    : isBeginner
       ? `This product is a great starting point to help support ${formattedGoalsList}.`
       : `This product is formulated to support ${formattedGoalsList}.`;
 
-  const knowns: string[] = [];
-  const unknowns: string[] = [];
-
-  if (product.brands?.name || product.brand) knowns.push("Brand");
-  else unknowns.push("Brand not provided");
-
-  if (ingredients.length > 0) knowns.push("Ingredients");
-  else unknowns.push("Full ingredient list unavailable");
-
-  if (productGoals.length > 0) knowns.push("Goals");
-  
-  if (attributes.length > 0) knowns.push("Quality attributes");
-
-  const hasThirdParty = attributes.some(a => a.toLowerCase().includes("third_party") || a.toLowerCase().includes("third party") || a.toLowerCase().includes("third-party"));
-  if (!hasThirdParty) unknowns.push("Third-party testing not provided");
-
-  const hasDosage = ingredients.length > 0 && ingredients.every(i => i.amount);
-  if (ingredients.length > 0 && !hasDosage) unknowns.push("Exact dosage missing");
-
   return (
-    <View style={styles.container}>
-      {/* Header Navigation overlay */}
-      <View style={[styles.headerOverlay, { paddingTop: insets.top + 10 }]}>
-        <Pressable style={styles.iconButton} onPress={() => router.back()}>
-          <Text style={styles.iconText}>←</Text>
-        </Pressable>
-        <View style={styles.headerRight}>
-          <Pressable style={[styles.iconButton, { marginRight: 12 }]} onPress={() => router.push(`/assistant?type=product&productId=${id}`)}>
-            <Text style={styles.iconText}>✨</Text>
-          </Pressable>
-          <Pressable style={styles.iconButton} onPress={toggleSave}>
-            <Text style={[styles.iconText, isSaved && styles.iconTextSaved]}>
-              {isSaved ? "♥" : "♡"}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Hero Area */}
-        <View style={styles.heroContainer}>
-          {getProductImageFallback(product.image_url) ? (
-            <Image source={{ uri: getProductImageFallback(product.image_url)! }} style={styles.heroImage} resizeMode="contain" />
-          ) : (
-            <View style={[styles.heroImage, styles.placeholderImage]}>
-              <Text style={styles.placeholderEmoji}>🧴</Text>
-            </View>
-          )}
-        </View>
 
-        {/* Product Titles */}
-        <View style={styles.titleSection}>
-          <Text style={styles.brandName}>{formatBrandName(product.brands?.name || product.brand) || "Elexir Curated"}</Text>
-          <Text style={styles.productName}>{formatProductName(product.name)}</Text>
-          {shouldDisplayField(formatCategory(product.category)) && (
-            <Text style={styles.categoryText}>{formatCategory(product.category)}</Text>
-          )}
-        </View>
+        {/* Spatial Hero Surface */}
+        <LinearGradient
+          colors={colorScheme === 'dark' ? ['#1A2518', '#111111'] : ['#F0FDF4', '#FFFFFF']}
+          style={[styles.heroSurface, { paddingTop: insets.top + 12 }]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        >
+          <View style={styles.heroHeaderOverlay}>
+            <Pressable style={styles.iconButtonContainer} onPress={() => router.back()}>
+              <Ionicons name="chevron-back" size={24} color={themeColors.text} />
+            </Pressable>
 
-        {/* Elexir Score Card */}
-        <View style={styles.scoreCard}>
-          <View style={styles.scoreHeader}>
-            <Text style={styles.scoreTitle}>Elexir Score</Text>
-            <View style={styles.scoreBadge}>
-              <Text style={styles.scoreValue}>{elexir.score} <Text style={styles.scoreMax}>/ 100</Text></Text>
+            <View style={styles.headerRight}>
+              <Pressable style={[styles.iconButtonContainer, { marginRight: 8 }]} onPress={() => router.push(`/assistant?type=product&productId=${id}`)}>
+                <Ionicons name="sparkles" size={20} color={themeColors.text} />
+              </Pressable>
             </View>
           </View>
-          
+
+          <View style={styles.heroImageWrapper}>
+            {getProductImageFallback(product.image_url) ? (
+              <Image
+                source={{ uri: getProductImageFallback(product.image_url)! }}
+                style={styles.heroImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.placeholderContainer}>
+                <Ionicons name="flask-outline" size={64} color={themeColors.textMuted} />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.titleSection}>
+            <Text style={[styles.brandName, { color: themeColors.textSecondary }]}>
+              {formatBrandName(product.brands?.name || product.brand) || "Elexir Curated"}
+            </Text>
+            <Text style={[styles.productName, { color: themeColors.text }]}>
+              {formatProductName(product.name)}
+            </Text>
+            {shouldDisplayField(formatCategory(product.category)) && (
+              <Text style={[styles.categoryText, { color: themeColors.textSecondary }]}>
+                {formatCategory(product.category)}
+              </Text>
+            )}
+          </View>
+        </LinearGradient>
+
+        {/* Elexir Score Diagnostic Report - Clean Supporting Surface */}
+        <View style={styles.section}>
+          <View style={styles.scoreHeader}>
+            <View>
+              <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary }]}>DIAGNOSTIC SIGNAL</Text>
+              <Text style={[styles.scoreSubtitle, { color: themeColors.textMuted }]}>Clinical quality index</Text>
+            </View>
+            <Text style={[styles.scoreValue, { color: themeColors.text }]}>
+              {elexir.score}
+            </Text>
+          </View>
+
           <View style={styles.scoreBreakdown}>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Transparency</Text>
-              <Text style={styles.breakdownValue}>{elexir.breakdown.transparency} <Text style={styles.breakdownMax}>/ 25</Text></Text>
+              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Transparency</Text>
+              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.transparency}</Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Ingredients</Text>
-              <Text style={styles.breakdownValue}>{elexir.breakdown.ingredients} <Text style={styles.breakdownMax}>/ 30</Text></Text>
+              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Ingredients</Text>
+              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.ingredients}</Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Quality</Text>
-              <Text style={styles.breakdownValue}>{elexir.breakdown.quality} <Text style={styles.breakdownMax}>/ 20</Text></Text>
+              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Quality</Text>
+              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.quality}</Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Goal Relevance</Text>
-              <Text style={styles.breakdownValue}>{elexir.breakdown.goalRelevance} <Text style={styles.breakdownMax}>/ 25</Text></Text>
+              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Goal Relevance</Text>
+              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.goalRelevance}</Text>
             </View>
           </View>
 
-          <View style={styles.scoreDivider} />
-
-          <Text style={styles.whyScoreTitle}>Why this scored {elexir.score}</Text>
-
           {elexir.pros.length > 0 && (
-            <View style={styles.scoreList}>
-              <Text style={styles.thingsToKnowTitle}>Strengths</Text>
+            <View style={[styles.scoreList, { marginTop: 32 }]}>
+              <Text style={[styles.thingsToKnowTitle, { color: themeColors.textSecondary }]}>CLINICAL STRENGTHS</Text>
               {elexir.pros.map((pro, idx) => (
-                <Text key={`pro-${idx}`} style={styles.scoreItem}>✓ {pro}</Text>
+                <View key={`pro-${idx}`} style={styles.bulletRow}>
+                  <Ionicons name="checkmark" size={18} color={themeColors.success} style={{ marginRight: 12, marginTop: 2 }} />
+                  <Text style={[styles.scoreItem, { color: themeColors.text }]}>{pro}</Text>
+                </View>
               ))}
             </View>
           )}
 
           {elexir.thingsToKnow.length > 0 && (
-            <View style={[styles.scoreList, { marginTop: elexir.pros.length > 0 ? 16 : 0 }]}>
-              <Text style={styles.thingsToKnowTitle}>Limited Information</Text>
+            <View style={[styles.scoreList, { marginTop: 24 }]}>
+              <Text style={[styles.thingsToKnowTitle, { color: themeColors.textSecondary }]}>CONSIDERATIONS</Text>
               {elexir.thingsToKnow.map((ttk, idx) => (
-                <Text key={`ttk-${idx}`} style={styles.scoreItemNeutral}>• {ttk}</Text>
+                <View key={`ttk-${idx}`} style={styles.bulletRow}>
+                  <Ionicons name="remove" size={18} color={themeColors.textMuted} style={{ marginRight: 12, marginTop: 2 }} />
+                  <Text style={[styles.scoreItemNeutral, { color: themeColors.textSecondary }]}>{ttk}</Text>
+                </View>
               ))}
             </View>
           )}
-
-          <Text style={styles.scoreDisclaimer}>
-            This score reflects available product information, transparency, and goal relevance. It does not measure medical effectiveness.
-          </Text>
         </View>
-
-        {/* Why This Matters (Curated) */}
-        {product.source === "elexir_curated" && product.raw_data?.description ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About this supplement</Text>
-            <View style={styles.card}>
-              <Text style={styles.cardText}>
-                {product.raw_data.description}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Why this supplement matters</Text>
-            <View style={styles.card}>
-              <Text style={styles.cardText}>
-                {introText}
-              </Text>
-            </View>
-          </View>
-        )}
 
         {/* Why It Matches You */}
         {match.score > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Matches your goals</Text>
-            <View style={styles.matchCard}>
-              <View style={styles.matchCardHeader}>
-                <View style={[styles.matchBadgeDetail, styles[`match_${match.score}` as keyof typeof styles]]}>
-                  <Text style={styles.matchBadgeTextDetail}>
-                    {match.score >= 3 ? "✨ " : ""}{match.label}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.cardText}>
-                {generateWhyItMatches(match.matchedGoals)}
+            <View style={styles.matchCardHeader}>
+              <Ionicons name="sparkles" size={16} color={themeColors.text} style={{ marginRight: 8 }} />
+              <Text style={[styles.matchBadgeTextDetail, { color: themeColors.text }]}>
+                {match.label} Synergy
               </Text>
-              <View style={styles.matchList}>
-                {match.matchedGoals.map(g => {
-                  const label = formatGoalLabel(g);
-                  if (!label) return null;
-                  return (
-                  <View key={g} style={styles.matchRow}>
-                    <Text style={styles.matchCheck}>✓</Text>
-                    <Text style={styles.matchText}>{label}</Text>
-                  </View>
-                )})}
-              </View>
             </View>
-          </View>
-        )}
-
-        {/* Key Benefits */}
-        {shouldDisplayField(productGoals) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Key Benefits</Text>
-            <View style={styles.chipsContainer}>
-              {productGoals.map(g => {
+            <Text style={[styles.bodyText, { color: themeColors.text, marginBottom: 16 }]}>
+              {generateWhyItMatches(match.matchedGoals)}
+            </Text>
+            <View style={styles.matchList}>
+              {match.matchedGoals.map(g => {
                 const label = formatGoalLabel(g);
                 if (!label) return null;
                 return (
-                <View key={g} style={styles.chip}>
-                  <Text style={styles.chipText}>{label}</Text>
-                </View>
-              )})}
+                  <View key={g} style={styles.matchRow}>
+                    <Ionicons name="analytics" size={16} color={themeColors.textSecondary} style={{ marginRight: 10 }} />
+                    <Text style={[styles.matchText, { color: themeColors.textSecondary }]}>{label}</Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
         )}
 
-        {/* What's Inside */}
+        {/* Summary & Intro Text */}
+        <View style={styles.section}>
+          <Text style={[styles.bodyTextLarge, { color: themeColors.textSecondary }]}>
+            {product.source === "elexir_curated" && product.raw_data?.description
+              ? product.raw_data.description
+              : introText}
+          </Text>
+        </View>
+
+        {/* What's Inside - Ingredients Table */}
         {shouldDisplayField(ingredients) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>What's inside</Text>
-            {ingredients.map((pi) => {
-              const ingName = formatIngredientName(pi.ingredient?.name);
-              if (!ingName) return null;
-              return (
-              <View key={pi.id} style={styles.ingredientCard}>
-                <View style={styles.ingredientHeader}>
-                  <Text style={styles.ingredientName}>{ingName}</Text>
-                  {pi.amount && (
-                    <Text style={styles.ingredientAmount}>{pi.amount}{pi.unit || ""}</Text>
-                  )}
-                </View>
-                {shouldDisplayField(pi.form) && (
-                  <Text style={styles.ingredientForm}>{pi.form}</Text>
-                )}
-                {shouldDisplayField(pi.ingredient?.description) && (
-                  <Text style={styles.ingredientDesc}>{pi.ingredient!.description}</Text>
-                )}
-              </View>
-            )})}
-            
+            <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 16 }]}>FORMULATION</Text>
+            <View style={styles.ingredientsList}>
+              {ingredients.map((pi, idx) => {
+                const ingName = formatIngredientName(pi.ingredient?.name);
+                if (!ingName) return null;
+                return (
+                  <View key={pi.id} style={styles.ingredientRow}>
+                    <View style={styles.ingredientMain}>
+                      <Text style={[styles.ingredientName, { color: themeColors.text }]}>{ingName}</Text>
+                      {pi.amount && (
+                        <Text style={[styles.ingredientAmount, { color: themeColors.text }]}>
+                          {pi.amount}{pi.unit || ""}
+                        </Text>
+                      )}
+                    </View>
+                    {shouldDisplayField(pi.form) && (
+                      <Text style={[styles.ingredientForm, { color: themeColors.textSecondary }]}>{pi.form}</Text>
+                    )}
+                    {shouldDisplayField(pi.ingredient?.description) && (
+                      <Text style={[styles.ingredientDesc, { color: themeColors.textMuted }]}>
+                        {pi.ingredient!.description}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+
             {Array.from(foundAllergies).map(allergy => (
               <View key={`allergy-${allergy}`} style={styles.allergyNotice}>
-                <Text style={styles.allergyNoticeText}>Contains possible {allergy}-derived ingredients.</Text>
-                <Text style={styles.allergyNoticeSub}>You indicated you avoid {allergy}.</Text>
+                <Ionicons name="warning" size={16} color={themeColors.warning} style={{ marginRight: 12, marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.allergyNoticeText, { color: themeColors.text }]}>
+                    Contains possible {allergy}-derived ingredients.
+                  </Text>
+                  <Text style={[styles.allergyNoticeSub, { color: themeColors.textSecondary }]}>
+                    Matches your listed allergen avoidance filters.
+                  </Text>
+                </View>
               </View>
             ))}
           </View>
         )}
 
-        {/* Quality & Transparency */}
+        {/* Quality & Transparency Specs */}
         {shouldDisplayField(attributes) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quality & Transparency</Text>
-            <View style={styles.card}>
+            <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 16 }]}>QUALITY VERIFICATIONS</Text>
+            <View style={styles.specList}>
               {isDietMatch && (
-                <View style={styles.matchRow}>
-                  <Text style={styles.matchCheck}>✓</Text>
-                  <Text style={styles.matchText}>Matches your diet</Text>
+                <View style={styles.specRow}>
+                  <Ionicons name="shield-checkmark" size={18} color={themeColors.text} style={{ marginRight: 12 }} />
+                  <Text style={[styles.specText, { color: themeColors.textSecondary }]}>Matches your diet type</Text>
                 </View>
               )}
               {attributes.map(a => {
                 const label = formatQualityAttribute(a);
                 if (!label) return null;
                 return (
-                <View key={a} style={styles.matchRow}>
-                  <Text style={styles.matchCheck}>✓</Text>
-                  <Text style={styles.matchText}>{label}</Text>
-                </View>
-              )})}
+                  <View key={a} style={styles.specRow}>
+                    <Ionicons name="shield-checkmark" size={18} color={themeColors.text} style={{ marginRight: 12 }} />
+                    <Text style={[styles.specText, { color: themeColors.textSecondary }]}>{label}</Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
         )}
-
-        {/* Safety & Trust */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Transparency</Text>
-          <View style={styles.card}>
-            <View style={{ marginBottom: unknowns.length > 0 ? 16 : 0 }}>
-              <Text style={styles.cardLabel}>What we know</Text>
-              {knowns.map(k => (
-                <View key={`known-${k}`} style={styles.matchRow}>
-                  <Text style={styles.matchCheck}>✓</Text>
-                  <Text style={styles.matchText}>{k}</Text>
-                </View>
-              ))}
-            </View>
-            
-            {unknowns.length > 0 && (
-              <View>
-                <Text style={styles.cardLabel}>What we don't know</Text>
-                {unknowns.map(u => (
-                  <View key={`unknown-${u}`} style={styles.matchRow}>
-                    <Text style={[styles.matchCheck, { color: '#8E8E93' }]}>?</Text>
-                    <Text style={[styles.matchText, { color: '#636366' }]}>{u}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Safety Note */}
-        <View style={styles.section}>
-          <View style={styles.safetyCard}>
-            <Text style={styles.safetyEmoji}>⚠️</Text>
-            <Text style={styles.safetyText}>
-              Elexir provides educational product information only. Always check with a healthcare professional if you are pregnant, breastfeeding, taking medication, or managing a medical condition.
-            </Text>
-          </View>
-        </View>
 
         {/* How To Use */}
-        {(product.source === "elexir_curated" && product.raw_data?.suggested_use) ? (
-          <View style={[styles.section, similarProducts.length === 0 ? { paddingBottom: 100 } : undefined]}>
-            <Text style={styles.sectionTitle}>How to use</Text>
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>Suggested use:</Text>
-              <Text style={styles.cardText}>
-                {product.raw_data.suggested_use}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={[styles.section, similarProducts.length === 0 ? { paddingBottom: 100 } : undefined]}>
-            <Text style={styles.sectionTitle}>How to use</Text>
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>Suggested use:</Text>
-              <Text style={styles.cardText}>
-                1 capsule daily with food, or as directed by your healthcare practitioner.
-              </Text>
-            </View>
-          </View>
-        )}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 16 }]}>SUGGESTED PROTOCOL</Text>
+          <Text style={[styles.bodyText, { color: themeColors.textSecondary }]}>
+            {product.source === "elexir_curated" && product.raw_data?.suggested_use
+              ? product.raw_data.suggested_use
+              : "1 capsule daily with water, preferably taken during mornings or as guided by your health professional."}
+          </Text>
+        </View>
+
+        {/* Safety Disclaimer */}
+        <View style={styles.section}>
+          <Text style={[styles.safetyText, { color: themeColors.textMuted }]}>
+            Educational information only. Consult with a healthcare professional regarding dosages, drug interactions, or personal clinical conditions.
+          </Text>
+        </View>
 
         {/* Similar Products */}
         {similarProducts.length > 0 && (
-          <View style={[styles.section, { paddingBottom: 100 }]}>
-            <Text style={styles.sectionTitle}>Similar products to explore</Text>
+          <View style={[styles.section, { paddingBottom: 160, paddingTop: 32 }]}>
+            <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 24 }]}>YOU MAY ALSO BENEFIT FROM...</Text>
             {similarProducts.map(p => {
               const pGoals = p.product_goals?.length ? p.product_goals.map(g => g.goal) : (p.inferred_goals || []);
               const pMatch = calculateMatch(userPreferences?.primary_goals, userPreferences?.health_concerns, pGoals);
               return (
-                <ProductCompareRow 
-                  key={p.id} 
-                  product={p} 
-                  match={pMatch} 
-                  onPress={() => router.push(`/product/${p.id}`)} 
-                />
+                <View key={p.id} style={{ marginBottom: 12 }}>
+                  <ProductCompareRow
+                    product={p}
+                    match={pMatch}
+                    onPress={() => router.push(`/product/${p.id}`)}
+                  />
+                </View>
               );
             })}
           </View>
         )}
-
       </ScrollView>
 
-      {/* Sticky Bottom CTA */}
-      <View style={[styles.bottomCTAContainer, { paddingBottom: insets.bottom || 24 }]}>
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <Pressable 
-            style={[styles.ctaButton, { flex: 1 }, isSaved && styles.ctaButtonSaved]} 
-            onPress={toggleSave}
-          >
-            <Text style={[styles.ctaText, isSaved && styles.ctaTextSaved]}>
-              {isSaved ? "Saved ✓" : "Save"}
-            </Text>
-          </Pressable>
-          <Pressable 
-            style={[styles.ctaButton, { flex: 1.5 }]} 
-            onPress={promptStack}
-          >
-            <Text style={styles.ctaText}>Add to Stack</Text>
-          </Pressable>
+      {/* Sticky Bottom CTA with OS Action Glassmorphism */}
+      <View style={styles.bottomCTAWrap}>
+        <View
+          style={[
+            styles.bottomCTAContainer,
+            { paddingBottom: insets.bottom || 24, backgroundColor: colorScheme === 'dark' ? 'rgba(20,20,20,0.95)' : 'rgba(255,255,255,0.95)' }
+          ]}
+        >
+          <View style={styles.ctaRow}>
+            <Pressable 
+              style={[styles.premiumIconBtn, { backgroundColor: themeColors.backgroundSecondary }]}
+              onPress={toggleSave}
+            >
+              <Ionicons name={isSaved ? "heart" : "heart-outline"} size={22} color={themeColors.text} />
+            </Pressable>
+            <Pressable 
+              style={[
+                styles.premiumPrimaryBtn, 
+                { backgroundColor: themeColors.text },
+                inStack && { backgroundColor: themeColors.border }
+              ]} 
+              onPress={inStack ? undefined : promptStack}
+            >
+              <Text style={[styles.premiumPrimaryBtnText, { color: themeColors.background }]}>
+                {inStack ? "Active in Stack" : "Add to Protocol"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -537,249 +500,201 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAF9F6" },
-  centerContainer: { flex: 1, backgroundColor: "#FAF9F6", alignItems: "center", justifyContent: "center" },
-  errorText: { fontSize: 18, color: "#1C1C1E", marginBottom: 16 },
-  backButtonEmpty: { padding: 12, backgroundColor: "#1C1C1E", borderRadius: 8 },
-  backButtonText: { color: "#FFF", fontWeight: "600" },
+  container: { flex: 1 },
+  centerContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  errorText: { fontSize: 18, marginBottom: 16 },
 
-  headerOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
+  scrollContent: {
+    paddingTop: 0,
+  },
+
+  heroSurface: {
+    paddingBottom: 56,
+    marginBottom: 40,
+  },
+  heroHeaderOverlay: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
+    paddingTop: 12,
     zIndex: 10,
   },
   headerRight: { flexDirection: "row" },
-  iconButton: {
+  iconButtonContainer: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  iconText: { fontSize: 22, color: "#1C1C1E", fontWeight: "300" },
-  iconTextSaved: { color: "#FF3B30" },
-
-  scrollContent: {
-    paddingTop: 100, // space for header
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
 
-  heroContainer: {
-    height: 280,
+  heroImageWrapper: {
+    height: 340,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 32,
+    marginTop: 24,
   },
   heroImage: {
     width: "80%",
-    height: "100%",
+    height: "90%",
+    ...Shadows.floating,
   },
-  placeholderImage: {
-    backgroundColor: "#F2F2F7",
-    borderRadius: 24,
+  placeholderContainer: {
     alignItems: "center",
     justifyContent: "center",
   },
-  placeholderEmoji: { fontSize: 80 },
 
   titleSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
+    paddingHorizontal: 32,
     alignItems: "center",
+    marginTop: 24,
   },
-  brandName: { fontSize: 13, color: "#8E8E93", fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 },
-  productName: { fontSize: 32, fontWeight: "800", color: "#1C1C1E", letterSpacing: -0.5, textAlign: "center", marginBottom: 8, lineHeight: 38 },
-  categoryText: { fontSize: 15, color: "#636366" },
+  brandName: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    marginBottom: 12
+  },
+  productName: {
+    fontSize: 36,
+    fontWeight: "800",
+    letterSpacing: -1.2,
+    marginBottom: 12,
+    lineHeight: 40,
+    textAlign: "center"
+  },
+  categoryText: {
+    fontSize: 15,
+    fontWeight: "500",
+    letterSpacing: 0.2,
+  },
 
   section: {
     paddingHorizontal: 24,
-    marginBottom: 32,
+    marginBottom: 48,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#8E8E93",
+  sectionTitlePrimary: {
+    fontSize: 10,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 16,
+    letterSpacing: 1.5,
   },
 
-  scoreCard: {
-    marginHorizontal: 24,
-    marginBottom: 40,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1, borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
-  },
   scoreHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: 32,
+  },
+  scoreSubtitle: { fontSize: 13, fontWeight: "500", marginTop: 4 },
+  scoreValue: { fontSize: 56, fontWeight: "300", letterSpacing: -2, lineHeight: 60 },
+
+  scoreBreakdown: { gap: 16 },
+  breakdownRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  breakdownLabel: { fontSize: 15, fontWeight: "500" },
+  breakdownValue: { fontSize: 16, fontWeight: "700" },
+
+  scoreList: { gap: 16 },
+  thingsToKnowTitle: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 },
+  bulletRow: { flexDirection: "row", alignItems: "flex-start" },
+  scoreItem: { fontSize: 15, fontWeight: "500", flex: 1, lineHeight: 22 },
+  scoreItemNeutral: { fontSize: 15, fontWeight: "500", flex: 1, lineHeight: 22 },
+
+  matchCardHeader: {
+    flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
   },
-  scoreTitle: { fontSize: 18, fontWeight: "700", color: "#1C1C1E" },
-  scoreBadge: {
-    backgroundColor: "#1C1C1E",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-  },
-  scoreValue: { fontSize: 16, fontWeight: "800", color: "#FFF" },
-  scoreMax: { fontSize: 12, fontWeight: "500", color: "#A1A1AA" },
-  scoreBreakdown: { marginBottom: 20 },
-  breakdownRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  breakdownLabel: { fontSize: 14, color: "#636366", fontWeight: "500" },
-  breakdownValue: { fontSize: 14, fontWeight: "700", color: "#1C1C1E" },
-  breakdownMax: { fontSize: 12, color: "#A1A1AA", fontWeight: "500" },
-  scoreDivider: { height: 1, backgroundColor: "rgba(0,0,0,0.06)", marginBottom: 20 },
-  whyScoreTitle: { fontSize: 15, fontWeight: "700", color: "#1C1C1E", marginBottom: 12 },
-  scoreList: {},
-  scoreItem: { fontSize: 14, color: "#3F3F46", marginBottom: 8, fontWeight: "500" },
-  thingsToKnowTitle: { fontSize: 12, fontWeight: "700", color: "#8E8E93", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
-  scoreItemNeutral: { fontSize: 14, color: "#636366", marginBottom: 6, lineHeight: 20 },
-  scoreDisclaimer: { fontSize: 11, color: "#A1A1AA", marginTop: 24, fontStyle: "italic", textAlign: "center", lineHeight: 16 },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1, borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
-  },
-  matchCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
-  },
-  matchCardHeader: {
-    flexDirection: "row",
-    marginBottom: 12,
-  },
-  matchBadgeDetail: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  match_3: { backgroundColor: "#E8F5E9" }, // Excellent
-  match_2: { backgroundColor: "#E3F2FD" }, // Good
-  match_1: { backgroundColor: "#F2F2F7" }, // Partial
   matchBadgeTextDetail: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1C1C1E",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
   },
-  matchList: { marginTop: 16 },
-  cardText: { fontSize: 16, color: "#3F3F46", lineHeight: 24, fontWeight: "400" },
-  cardLabel: { fontSize: 13, color: "#8E8E93", fontWeight: "600", marginBottom: 4 },
+  matchList: { gap: 12 },
+  bodyText: { fontSize: 16, lineHeight: 26, fontWeight: "400" },
+  bodyTextLarge: { fontSize: 18, lineHeight: 28, fontWeight: "400", textAlign: "center" },
 
-  matchRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  matchCheck: { fontSize: 16, color: "#10B981", marginRight: 12, fontWeight: "800" },
-  matchText: { fontSize: 16, color: "#1C1C1E", fontWeight: "500", textTransform: "capitalize" },
+  matchRow: { flexDirection: "row", alignItems: "center" },
+  matchText: { fontSize: 16, fontWeight: "500", textTransform: "capitalize" },
 
-  chipsContainer: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  chip: {
-    backgroundColor: "#F2F2F7",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 100,
+  ingredientsList: {
+    marginTop: 8,
   },
-  chipText: { fontSize: 14, fontWeight: "600", color: "#1C1C1E", textTransform: "capitalize" },
-
-  emptyText: { color: "#8E8E93", fontStyle: "italic" },
-  ingredientCard: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1, borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
+  ingredientRow: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
-  ingredientHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
-  ingredientName: { fontSize: 16, fontWeight: "700", color: "#1C1C1E", flex: 1, marginRight: 8 },
-  ingredientAmount: { fontSize: 16, fontWeight: "600", color: "#1C1C1E" },
-  ingredientForm: { fontSize: 14, color: "#8E8E93", marginBottom: 8 },
-  ingredientDesc: { fontSize: 14, color: "#3F3F46", lineHeight: 22, marginTop: 4 },
+  ingredientMain: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  ingredientName: { fontSize: 17, fontWeight: "700", flex: 1, marginRight: 16 },
+  ingredientAmount: { fontSize: 17, fontWeight: "700" },
+  ingredientForm: { fontSize: 14, marginBottom: 8, fontWeight: "500" },
+  ingredientDesc: { fontSize: 14, lineHeight: 22 },
 
   allergyNotice: {
-    backgroundColor: "#F2F2F7",
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 4,
-    marginBottom: 8,
+    flexDirection: "row",
+    padding: 20,
+    borderRadius: BorderRadii.xl,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    marginTop: 24,
   },
   allergyNoticeText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1C1C1E",
+    fontSize: 15,
+    fontWeight: "700",
     marginBottom: 4,
   },
   allergyNoticeSub: {
-    fontSize: 13,
-    color: "#636366",
+    fontSize: 14,
+    lineHeight: 20,
   },
 
-  safetyCard: {
-    backgroundColor: "#F2F2F7",
-    padding: 16,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "flex-start",
+  specList: {
+    marginTop: 8,
   },
-  safetyEmoji: {
-    fontSize: 20,
-    marginRight: 12,
-  },
+  specRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
+  specText: { fontSize: 16, fontWeight: "500" },
+
   safetyText: {
-    flex: 1,
     fontSize: 13,
-    color: "#636366",
-    lineHeight: 18,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 
-  bottomCTAContainer: {
+  bottomCTAWrap: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(255,255,255,0.9)",
+  },
+  bottomCTAContainer: {
     paddingTop: 16,
     paddingHorizontal: 24,
     borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.05)",
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  ctaButton: {
-    backgroundColor: "#1C1C1E",
-    paddingVertical: 18,
-    borderRadius: 100,
+  ctaRow: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  premiumIconBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+    justifyContent: "center",
   },
-  ctaButtonSaved: {
-    backgroundColor: "#F2F2F7",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
-    shadowOpacity: 0,
-    elevation: 0,
+  premiumPrimaryBtn: {
+    flex: 1,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  ctaText: { fontSize: 16, fontWeight: "700", color: "#FFF" },
-  ctaTextSaved: { color: "#1C1C1E" },
+  premiumPrimaryBtnText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
 });

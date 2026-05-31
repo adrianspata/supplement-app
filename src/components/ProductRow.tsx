@@ -2,6 +2,9 @@ import React, { ReactNode } from "react";
 import { Pressable, View, Text, Image, StyleSheet, StyleProp, ViewStyle } from "react-native";
 import { Product } from "../../lib/types";
 import { formatProductName, formatBrandName, formatCategory, formatGoalLabel, shouldDisplayField, getProductImageFallback } from "../../lib/productDisplay";
+import { Colors, Spacing, BorderRadii, Shadows } from "../constants/theme";
+import { useColorScheme } from "../hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 
 export interface ProductRowProps {
   product: Product;
@@ -26,38 +29,69 @@ export function ProductRow({
   compact,
   style
 }: ProductRowProps) {
+  const scheme = useColorScheme();
+  const colorScheme = scheme === 'dark' ? 'dark' : 'light';
+  const themeColors = Colors[colorScheme];
+
   const imageUrl = image || getProductImageFallback(product.image_url);
 
   return (
     <Pressable 
-      style={({ pressed }) => [styles.card, compact && styles.compactCard, pressed && { opacity: 0.85 }, style]} 
+      style={({ pressed }) => [
+        styles.card, 
+        compact && styles.compactCard,
+        {
+          backgroundColor: themeColors.background,
+          borderColor: themeColors.borderMuted,
+        },
+        pressed && { opacity: 0.85 }, 
+        style
+      ]} 
       onPress={onPress}
       disabled={!onPress}
     >
-      <View style={[styles.imageContainer, compact && styles.compactImageContainer]}>
+      <View style={[styles.imageContainer, compact && styles.compactImageContainer, { backgroundColor: themeColors.backgroundSecondary }]}>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="contain" />
         ) : (
-          <Text style={{ fontSize: compact ? 20 : 28 }}>🧴</Text>
+          <Ionicons name="flask-outline" size={compact ? 20 : 26} color={themeColors.textSecondary} />
         )}
       </View>
       
       <View style={styles.content}>
-        <Text style={[styles.name, compact && styles.compactName]} numberOfLines={compact ? 1 : 2}>
+        <Text 
+          style={[
+            styles.name, 
+            compact && styles.compactName, 
+            { color: themeColors.text }
+          ]} 
+          numberOfLines={compact ? 1 : 2}
+        >
           {formatProductName(product.name) || "Unknown Product"}
         </Text>
         
         {shouldDisplayField(formatBrandName(product.brands?.name || product.brand)) ? (
-          <Text style={styles.brand} numberOfLines={1}>{formatBrandName(product.brands?.name || product.brand)}</Text>
+          <Text style={[styles.brand, { color: themeColors.textSecondary }]} numberOfLines={1}>
+            {formatBrandName(product.brands?.name || product.brand)}
+          </Text>
         ) : shouldDisplayField(formatCategory(product.category)) ? (
-          <Text style={styles.brand} numberOfLines={1}>{formatCategory(product.category)}</Text>
+          <Text style={[styles.brand, { color: themeColors.textSecondary }]} numberOfLines={1}>
+            {formatCategory(product.category)}
+          </Text>
         ) : null}
 
         <View style={styles.badges}>
           {match && match.score > 0 && (
-            <View style={[styles.matchBadge, styles[`match_${match.score}` as keyof typeof styles]]}>
-              <Text style={styles.matchBadgeText}>
-                {match.score >= 3 ? "✨ " : ""}{match.label}
+            <View 
+              style={[
+                styles.matchBadge, 
+                match.score === 3 && { backgroundColor: colorScheme === 'dark' ? '#142E1B' : '#F0F9F0' },
+                match.score === 2 && { backgroundColor: colorScheme === 'dark' ? '#1B2E3E' : '#F0F4F9' },
+                match.score === 1 && { backgroundColor: themeColors.backgroundElement }
+              ]}
+            >
+              <Text style={[styles.matchBadgeText, { color: themeColors.text }]}>
+                {match.label}
               </Text>
             </View>
           )}
@@ -68,8 +102,8 @@ export function ProductRow({
                 const label = formatGoalLabel(g);
                 if (!label) return null;
                 return (
-                  <View key={g} style={styles.goalChip}>
-                    <Text style={styles.goalText}>{label}</Text>
+                  <View key={g} style={[styles.goalChip, { backgroundColor: themeColors.backgroundSecondary }]}>
+                    <Text style={[styles.goalText, { color: themeColors.textSecondary }]}>{label}</Text>
                   </View>
                 );
               })}
@@ -77,8 +111,8 @@ export function ProductRow({
           )}
           
           {reason && (
-            <View style={styles.reasonChip}>
-              <Text style={styles.reasonText}>✨ {reason}</Text>
+            <View style={[styles.reasonChip, { backgroundColor: themeColors.backgroundSelected }]}>
+              <Text style={[styles.reasonText, { color: themeColors.textSecondary }]}>{reason}</Text>
             </View>
           )}
         </View>
@@ -96,16 +130,10 @@ export function ProductRow({
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: BorderRadii.xl,
     padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    ...Shadows.low,
     marginBottom: 12,
   },
   compactCard: {
@@ -114,8 +142,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: 64,
     height: 64,
-    borderRadius: 12,
-    backgroundColor: "#F2F2F7",
+    borderRadius: BorderRadii.md,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
@@ -128,27 +155,26 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
-    borderRadius: 12,
+    borderRadius: BorderRadii.md,
   },
   content: {
     flex: 1,
     justifyContent: "center",
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#1C1C1E",
     marginBottom: 4,
+    letterSpacing: -0.2,
   },
   compactName: {
     marginBottom: 2,
   },
   brand: {
-    fontSize: 12,
-    color: "#8E8E93",
+    fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 1.5,
+    letterSpacing: 1.0,
     marginBottom: 6,
   },
   badges: {
@@ -160,15 +186,11 @@ const styles = StyleSheet.create({
   matchBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: BorderRadii.sm,
   },
-  match_3: { backgroundColor: "#E8F5E9" },
-  match_2: { backgroundColor: "#E3F2FD" },
-  match_1: { backgroundColor: "#F2F2F7" },
   matchBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#1C1C1E",
   },
   goalsContainer: {
     flexDirection: "row",
@@ -176,15 +198,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   goalChip: {
-    backgroundColor: "#F2F2F7",
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: BorderRadii.sm,
   },
   goalText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#636366",
     textTransform: "capitalize",
   },
   rightAccessory: {
@@ -193,16 +213,14 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   reasonChip: {
-    backgroundColor: "#FDF4E6",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: BorderRadii.sm,
     marginTop: 2,
     width: "100%",
   },
   reasonText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#D97706",
   },
 });
