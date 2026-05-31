@@ -49,3 +49,25 @@ export async function upsertTodayCheckIn(
 
   return { data: data as DailyCheckIn | null, error };
 }
+
+export async function getCheckInsForDateRange(
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<DailyCheckIn[]> {
+  const { data, error } = await supabase
+    .from('daily_checkins')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('checkin_date', startDate)
+    .lte('checkin_date', endDate)
+    .order('checkin_date', { ascending: true });
+
+  if (error) {
+    console.error("Error fetching check-ins for date range:", error);
+    return [];
+  }
+
+  return data as DailyCheckIn[];
+}
+
