@@ -9,13 +9,22 @@ import {
   ActivityIndicator,
   Switch,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import type { Profile } from "../lib/types";
 import { getRemindersEnabled, setRemindersEnabled, syncNotifications } from "../lib/notifications";
+import { PageContainer } from "../src/components/ui/PageContainer";
+import { SoftCard } from "../src/components/ui/SoftCard";
+import { PremiumButton } from "../src/components/ui/PremiumButton";
+import { Colors, Spacing, BorderRadii } from "../src/constants/theme";
+import { useColorScheme } from "../src/hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const scheme = useColorScheme();
+  const colorScheme = scheme === "dark" ? "dark" : "light";
+  const themeColors = Colors[colorScheme];
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
@@ -39,7 +48,6 @@ export default function ProfileScreen() {
       await syncNotifications(profile.id);
     }
     
-    // Refresh state in case permissions were denied and it reverted
     const check = await getRemindersEnabled();
     setRemindersState(check);
   }
@@ -48,8 +56,8 @@ export default function ProfileScreen() {
     try {
       const {
         data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        userError,
+      } = await supabase.auth.getUser() as any;
 
       if (userError || !user) return;
 
@@ -62,7 +70,6 @@ export default function ProfileScreen() {
       if (!error && data) {
         setProfile(data as Profile);
       } else {
-        // Fallback: show at least the auth email
         setProfile({
           id: user.id,
           email: user.email ?? null,
@@ -87,7 +94,6 @@ export default function ProfileScreen() {
     if (error) {
       Alert.alert("Error signing out", error.message);
     }
-    // _layout.tsx onAuthStateChange will redirect to auth/signup
   }
 
   const displayName = profile?.full_name || profile?.email || "—";
@@ -97,86 +103,97 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1C1C1E" />
-        </View>
-      </SafeAreaView>
+      <View style={[styles.loadingContainer, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator size="small" color={themeColors.text} />
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <PageContainer scrollable contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>←</Text>
+          <Ionicons name="arrow-back-outline" size={24} color={themeColors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <View style={styles.backBtnPlaceholder} />
+        <Text style={[styles.headerTitle, { color: themeColors.text }]}>Identity Hub</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Content */}
-      <View style={styles.content}>
-        {/* Avatar + Name card */}
-        <View style={styles.card}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
-          <Text style={styles.displayName}>{displayName}</Text>
-          {profile?.full_name && profile.email ? (
-            <Text style={styles.emailText}>{profile.email}</Text>
-          ) : null}
+      {/* Profile Card */}
+      <SoftCard style={styles.profileCard}>
+        <View style={[styles.avatarContainer, { backgroundColor: themeColors.backgroundSelected }]}>
+          <Text style={[styles.avatarText, { color: themeColors.text }]}>{initials}</Text>
         </View>
+        <Text style={[styles.displayName, { color: themeColors.text }]}>{displayName}</Text>
+        {profile?.full_name && profile.email ? (
+          <Text style={[styles.emailText, { color: themeColors.textSecondary }]}>{profile.email}</Text>
+        ) : null}
+      </SoftCard>
 
-        {/* Settings rows */}
-        <View style={styles.settingsGroup}>
-          <Text style={styles.settingsTitle}>Account Settings</Text>
-
-          <Pressable style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Edit Profile</Text>
-            <Text style={styles.settingArrow}>→</Text>
+      {/* Settings Options */}
+      <View style={styles.settingsSection}>
+        <Text style={[styles.settingsTitle, { color: themeColors.textMuted }]}>Preferences & System</Text>
+        
+        <SoftCard style={{ padding: 0, overflow: "hidden" }}>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: themeColors.borderMuted }]}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="person-outline" size={18} color={themeColors.textSecondary} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingLabel, { color: themeColors.text }]}>Profile Details</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={themeColors.textMuted} />
           </Pressable>
 
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Enable Reminders</Text>
+          <View style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: themeColors.borderMuted }]}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="notifications-outline" size={18} color={themeColors.textSecondary} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingLabel, { color: themeColors.text }]}>Reminders</Text>
+            </View>
             <Switch 
               value={remindersEnabled} 
               onValueChange={toggleReminders} 
-              trackColor={{ false: "#EBEAE4", true: "#34C759" }}
+              trackColor={{ false: themeColors.backgroundElement, true: themeColors.text }}
+              thumbColor={themeColors.background}
             />
           </View>
 
-          <Pressable style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Privacy & Security</Text>
-            <Text style={styles.settingArrow}>→</Text>
+          <Pressable style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: themeColors.borderMuted }]}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="shield-outline" size={18} color={themeColors.textSecondary} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingLabel, { color: themeColors.text }]}>Privacy & Trust</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={themeColors.textMuted} />
           </Pressable>
-        </View>
 
-        {/* Sign out */}
-        <Pressable
-          onPress={handleSignOut}
-          disabled={signingOut}
-          style={({ pressed }) => [
-            styles.signOutBtn,
-            pressed && { opacity: 0.8 },
-            signingOut && { opacity: 0.5 },
-          ]}
-        >
-          {signingOut ? (
-            <ActivityIndicator color="#FF3B30" />
-          ) : (
-            <Text style={styles.signOutText}>Log Out</Text>
-          )}
-        </Pressable>
+          <Pressable 
+            style={styles.settingRow}
+            onPress={() => router.push("/admin/ingest")}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="cloud-upload-outline" size={18} color={themeColors.text} style={{ marginRight: 12 }} />
+              <Text style={[styles.settingLabel, { color: themeColors.text }]}>[Admin] Ingestion Console</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={themeColors.textMuted} />
+          </Pressable>
+        </SoftCard>
       </View>
-    </SafeAreaView>
+
+      {/* Logout Action */}
+      <View style={styles.footerAction}>
+        <PremiumButton 
+          title="Sign Out" 
+          onPress={handleSignOut}
+          variant="secondary"
+          style={{ width: "100%" }}
+        />
+      </View>
+    </PageContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FAF9F6" },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  content: { paddingBottom: 60 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -188,48 +205,35 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#EBEAE4",
-    alignItems: "center",
     justifyContent: "center",
   },
-  backBtnText: { fontSize: 20, color: "#1C1C1E" },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#1C1C1E" },
-  backBtnPlaceholder: { width: 40, height: 40 },
-  content: { flex: 1, paddingHorizontal: 24 },
-  card: {
-    backgroundColor: "#FFF",
-    borderRadius: 24,
-    padding: 32,
+  headerTitle: { fontSize: 20, fontWeight: "700", letterSpacing: -0.3 },
+  profileCard: {
     alignItems: "center",
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 16,
-    elevation: 2,
+    paddingVertical: 32,
+    marginHorizontal: 24,
   },
   avatarContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#1C1C1E",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
   },
-  avatarText: { fontSize: 28, fontWeight: "700", color: "#FFF" },
-  displayName: { fontSize: 18, fontWeight: "700", color: "#1C1C1E" },
-  emailText: { fontSize: 14, color: "#636366", marginTop: 4 },
-  settingsGroup: { marginBottom: 40 },
+  avatarText: { fontSize: 26, fontWeight: "700" },
+  displayName: { fontSize: 20, fontWeight: "700", letterSpacing: -0.2 },
+  emailText: { fontSize: 14, marginTop: 4 },
+  
+  settingsSection: {
+    marginHorizontal: 24,
+    marginTop: 12,
+  },
   settingsTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#8E8E93",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     marginBottom: 12,
     marginLeft: 4,
   },
@@ -237,26 +241,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFF",
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  settingLabel: { fontSize: 17, fontWeight: "500", color: "#1C1C1E" },
-  settingArrow: { fontSize: 17, color: "#8E8E93" },
-  signOutBtn: {
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#FF3B30",
-    borderRadius: 100,
-    paddingVertical: 18,
+  rowLeft: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: "auto",
-    marginBottom: 40,
   },
-  signOutText: { color: "#FF3B30", fontSize: 17, fontWeight: "700" },
+  settingLabel: { fontSize: 16, fontWeight: "500" },
+  footerAction: {
+    paddingHorizontal: 24,
+    marginTop: 40,
+  },
 });

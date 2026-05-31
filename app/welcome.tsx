@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
   dotActive: {
-    backgroundColor: '#0A84FF', // Apple blue
+    backgroundColor: '#111111',
   },
   benefitsContainer: {
     gap: 24,

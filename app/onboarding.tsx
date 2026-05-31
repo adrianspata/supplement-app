@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { Ionicons } from '@expo/vector-icons';
 import { useState, useMemo } from "react";
 import {
   Pressable,
@@ -22,24 +23,25 @@ import { Image } from 'expo-image';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GOALS: { value: PrimaryGoal; label: string; emoji: string }[] = [
-  { value: 'energy',            label: 'Better Energy',          emoji: '⚡️' },
-  { value: 'sleep',             label: 'Better Sleep',           emoji: '🌙' },
-  { value: 'stress',            label: 'Stress Management',      emoji: '🧘' },
-  { value: 'focus',             label: 'Focus & Productivity',   emoji: '🧠' },
-  { value: 'immune',            label: 'Immune Support',         emoji: '🛡️' },
-  { value: 'longevity',         label: 'Longevity',              emoji: '🌿' },
-  { value: 'hormonal',          label: 'Hormonal Balance',       emoji: '⚖️' },
-  { value: 'athletic',          label: 'Athletic Performance',   emoji: '💪' },
-  { value: 'general_wellness',  label: 'General Wellness',       emoji: '✨' },
-  { value: 'weight_management', label: 'Weight Management',      emoji: '📊' },
+const GOALS: { value: PrimaryGoal; label: string; icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap }[] = [
+  { value: 'energy',            label: 'Better Energy',          icon: 'flash-outline' },
+  { value: 'sleep',             label: 'Better Sleep',           icon: 'moon-outline' },
+  { value: 'stress',            label: 'Stress Management',      icon: 'leaf-outline' },
+  { value: 'focus',             label: 'Focus & Productivity',   icon: 'bulb-outline' },
+  { value: 'immune',            label: 'Immune Support',         icon: 'shield-checkmark-outline' },
+  { value: 'longevity',         label: 'Longevity',              icon: 'hourglass-outline' },
+  { value: 'hormonal',          label: 'Hormonal Balance',       icon: 'options-outline' },
+  { value: 'athletic',          label: 'Athletic Performance',   icon: 'bicycle-outline' },
+  { value: 'general_wellness',  label: 'General Wellness',       icon: 'sparkles-outline' },
+  { value: 'weight_management', label: 'Weight Management',      icon: 'scale-outline' },
 ];
 
-const HEALTH_SCORES: { value: HealthSelfAssessment; label: string; emoji: string }[] = [
-  { value: 4, label: 'Excellent', emoji: '🌟' },
-  { value: 3, label: 'Good', emoji: '😊' },
-  { value: 2, label: 'Average', emoji: '😐' },
-  { value: 1, label: 'Poor', emoji: '😫' },
+const FEELING_OPTIONS = [
+  { value: 5, label: 'Excellent' },
+  { value: 4, label: 'Very Good' },
+  { value: 3, label: 'Good' },
+  { value: 2, label: 'Average' },
+  { value: 1, label: 'Poor' },
 ];
 
 const DIET_TYPES: { value: DietType; label: string; desc: string }[] = [
@@ -66,17 +68,17 @@ const HEALTH_CONCERNS = [
   'Low Recovery', 'Digestive Issues', 'Low Mood', 'Frequent Illness', 'Hormonal imbalance', 'Joint pain', 'Migraines', 'Skin issues', 'Low libido'
 ];
 
-const REMINDER_OPTIONS: { value: ReminderTime; label: string; emoji: string }[] = [
-  { value: 'morning',   label: 'Morning',       emoji: '🌅' },
-  { value: 'afternoon', label: 'Afternoon',     emoji: '☀️' },
-  { value: 'evening',   label: 'Evening',       emoji: '🌆' },
-  { value: 'multiple',  label: 'Multiple Times', emoji: '🔔' },
+const REMINDER_OPTIONS: { value: ReminderTime; label: string; icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap }[] = [
+  { value: 'morning',   label: 'Morning',       icon: 'sunny-outline' },
+  { value: 'afternoon', label: 'Afternoon',     icon: 'partly-sunny-outline' },
+  { value: 'evening',   label: 'Evening',       icon: 'moon-outline' },
+  { value: 'multiple',  label: 'Multiple Times', icon: 'notifications-outline' },
 ];
 
-const KNOWLEDGE_LEVELS: { value: HealthKnowledgeLevel; label: string; desc: string }[] = [
-  { value: 'beginner',     label: '🌱  Beginner',     desc: 'Just starting my wellness journey' },
-  { value: 'intermediate', label: '📚  Intermediate', desc: 'Know the basics, want to go deeper' },
-  { value: 'advanced',     label: '🔬  Advanced',     desc: 'Deep knowledge of supplements & health' },
+const KNOWLEDGE_LEVELS: { value: HealthKnowledgeLevel; label: string; desc: string; icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap }[] = [
+  { value: 'beginner',     label: 'Beginner',     desc: 'Just starting my wellness journey', icon: 'leaf-outline' },
+  { value: 'intermediate', label: 'Intermediate', desc: 'Know the basics, want to go deeper', icon: 'book-outline' },
+  { value: 'advanced',     label: 'Advanced',     desc: 'Deep knowledge of supplements & health', icon: 'flask-outline' },
 ];
 
 type StepType = 'welcome' | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 'success' | 'rating';
@@ -270,7 +272,7 @@ export default function Onboarding() {
   const renderLogo = () => (
     <View style={styles.logoAnchor}>
       <View style={styles.logoContainer}>
-        <Text style={styles.logoIcon}>🧬</Text>
+        <Ionicons name="pulse" size={20} color="#111111" />
       </View>
     </View>
   );
@@ -293,16 +295,16 @@ export default function Onboarding() {
       <Text style={styles.title}>What are your primary{'\n'}health goals?</Text>
       <Text style={styles.subtitle}>We’ll personalize your supplement guidance based on your goals. Select all that apply.</Text>
       <View style={styles.optionsList}>
-        {GOALS.map(({ value, label, emoji }) => {
-          const isActive = goals.includes(value);
+        {GOALS.map((item) => {
+          const isActive = goals.includes(item.value);
           return (
             <Pressable
-              key={value}
+              key={item.value}
               style={[styles.listBtn, isActive && styles.listBtnActive]}
-              onPress={() => toggleItem(goals as unknown as string[], setGoals as unknown as (v: string[]) => void, value as unknown as string)}
+              onPress={() => toggleItem(goals as unknown as string[], setGoals as unknown as (v: string[]) => void, item.value as unknown as string)}
             >
-              <Text style={[styles.listBtnEmoji]}>{emoji}</Text>
-              <Text style={[styles.listBtnText, isActive && styles.listBtnTextActive]}>{label}</Text>
+              <Ionicons name={item.icon} size={20} color={isActive ? "#111111" : "#6B6B6B"} style={styles.listBtnEmoji} />
+              <Text style={[styles.listBtnText, isActive && styles.listBtnTextActive]}>{item.label}</Text>
             </Pressable>
           );
         })}
@@ -316,13 +318,12 @@ export default function Onboarding() {
       <Text style={styles.title}>How would you describe{'\n'}your health today?</Text>
       <Text style={styles.subtitle}>This helps us understand your baseline and track improvements.</Text>
       <View style={styles.optionsList}>
-        {HEALTH_SCORES.map(({ value, label, emoji }) => (
+        {FEELING_OPTIONS.map(({ value, label }) => (
           <Pressable
             key={value}
             style={[styles.listBtn, healthScore === value && styles.listBtnActive]}
-            onPress={() => setHealthScore(value)}
+            onPress={() => setHealthScore(value as HealthSelfAssessment)}
           >
-            <Text style={[styles.listBtnEmoji]}>{emoji}</Text>
             <Text style={[styles.listBtnText, healthScore === value && styles.listBtnTextActive]}>{label}</Text>
           </Pressable>
         ))}
@@ -553,13 +554,13 @@ export default function Onboarding() {
       <Text style={styles.title}>When do you prefer{'\n'}to take supplements?</Text>
       <Text style={styles.subtitle}>We'll schedule your daily reminders around this.</Text>
       <View style={styles.optionsList}>
-        {REMINDER_OPTIONS.map(({ value, label, emoji }) => (
+        {REMINDER_OPTIONS.map(({ value, label, icon }) => (
           <Pressable
             key={value}
             style={[styles.listBtn, reminderTime === value && styles.listBtnActive]}
             onPress={() => setReminderTime(value)}
           >
-            <Text style={styles.listBtnEmoji}>{emoji}</Text>
+            <Ionicons name={icon} size={20} color={reminderTime === value ? "#111111" : "#6B6B6B"} style={{ marginRight: 12 }} />
             <Text style={[styles.listBtnText, reminderTime === value && styles.listBtnTextActive]}>{label}</Text>
           </Pressable>
         ))}
@@ -573,12 +574,13 @@ export default function Onboarding() {
       <Text style={styles.title}>How much do you know{'\n'}about supplements?</Text>
       <Text style={styles.subtitle}>This helps us calibrate how we explain recommendations to you.</Text>
       <View style={styles.optionsList}>
-        {KNOWLEDGE_LEVELS.map(({ value, label, desc }) => (
+        {KNOWLEDGE_LEVELS.map(({ value, label, desc, icon }) => (
           <Pressable
             key={value}
             style={[styles.listBtn, knowledgeLevel === value && styles.listBtnActive]}
             onPress={() => setKnowledgeLevel(value)}
           >
+            <Ionicons name={icon} size={20} color={knowledgeLevel === value ? "#111111" : "#6B6B6B"} style={{ marginRight: 12 }} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.listBtnText, knowledgeLevel === value && styles.listBtnTextActive]}>{label}</Text>
               <Text style={[styles.listBtnDesc, knowledgeLevel === value && styles.listBtnDescActive]}>{desc}</Text>
@@ -594,7 +596,7 @@ export default function Onboarding() {
     return (
       <View style={[styles.stepContainer, styles.centeredStep]}>
         <View style={styles.successIcon}>
-          <Text style={styles.successEmoji}>🧴</Text>
+          <Ionicons name="checkmark-circle-outline" size={32} color="#22C55E" />
         </View>
         <Text style={[styles.title, { textAlign: 'center' }]}>Your wellness profile is ready.</Text>
         
