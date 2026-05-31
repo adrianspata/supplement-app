@@ -1,11 +1,35 @@
 import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 
-const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+const isServer = typeof window === "undefined";
+
+const ExpoStorageAdapter = {
+  getItem: async (key: string) => {
+    if (isServer) return null;
+    if (Platform.OS === "web") {
+      return window.localStorage.getItem(key);
+    }
+    return SecureStore.getItemAsync(key);
+  },
+
+  setItem: async (key: string, value: string) => {
+    if (isServer) return;
+    if (Platform.OS === "web") {
+      window.localStorage.setItem(key, value);
+      return;
+    }
+    await SecureStore.setItemAsync(key, value);
+  },
+
+  removeItem: async (key: string) => {
+    if (isServer) return;
+    if (Platform.OS === "web") {
+      window.localStorage.removeItem(key);
+      return;
+    }
+    await SecureStore.deleteItemAsync(key);
+  },
 };
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -17,19 +41,32 @@ if (!supabaseUrl || !supabaseKey) {
   );
 }
 
+// Dummy transport for SSR to prevent Supabase from crashing when WebSocket is missing
+let customTransport: any = undefined;
+if (typeof WebSocket === "undefined") {
+  customTransport = class DummyWebSocket {};
+}
+
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    storage: ExpoSecureStoreAdapter,
+    storage: ExpoStorageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
   },
+  ...(customTransport && {
+    realtime: {
+      transport: customTransport,
+    },
+  }),
 });
 
-AppState.addEventListener("change", (state) => {
-  if (state === "active") {
-    supabase.auth.startAutoRefresh();
-  } else {
-    supabase.auth.stopAutoRefresh();
-  }
-});
+if (!isServer && Platform.OS !== "web") {
+  AppState.addEventListener("change", (state) => {
+    if (state === "active") {
+      supabase.auth.startAutoRefresh();
+    } else {
+      supabase.auth.stopAutoRefresh();
+    }
+  });
+}

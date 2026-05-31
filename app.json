@@ -39,9 +39,16 @@
           }
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Elexir requires camera access to scan physical supplement packaging and labels."
+        }
+      ],
       "expo-secure-store",
       "expo-image",
-      "expo-asset"
+      "expo-asset",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
