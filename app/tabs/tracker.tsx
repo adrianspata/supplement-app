@@ -1,23 +1,31 @@
 import { useState, useCallback, useMemo } from "react";
-import { Alert, StyleSheet, Text, View, ScrollView, RefreshControl } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Alert, StyleSheet, Text, View, RefreshControl, Pressable } from "react-native";
+import { PageContainer } from "../../src/components/ui/PageContainer";
+import { SoftCard } from "../../src/components/ui/SoftCard";
+import { Colors, Spacing, BorderRadii } from "../../src/constants/theme";
+import { useColorScheme } from "../../src/hooks/use-color-scheme";
 import { supabase } from "../../lib/supabase";
 import { getUserStack, getLogsForDateRange, toggleDailyLog } from "../../lib/stack";
 import { UserStackItem, DailyStackLog } from "../../lib/types";
 import { generateStackInsights } from "../../lib/insights";
 import { generateCoachInsights, CoachInsight } from "../../lib/coach";
-import { ElexirCoachCard } from "../../src/components/ElexirCoachCard";
 import { ProductRow } from "../../src/components/ProductRow";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "../../lib/auth-context";
 import { syncNotifications } from "../../lib/notifications";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function Tracker() {
+  const scheme = useColorScheme();
+  const colorScheme = scheme === "dark" ? "dark" : "light";
+  const themeColors = Colors[colorScheme];
+
   const [stack, setStack] = useState<UserStackItem[]>([]);
   const [logs, setLogs] = useState<Record<string, DailyStackLog>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [coachInsights, setCoachInsights] = useState<CoachInsight[]>([]);
+  const [currentInsightIndex, setCurrentInsightIndex] = useState(0);
   const { userPreferences } = useAuth();
   const preferredTime = userPreferences?.reminder_time;
 
@@ -73,9 +81,10 @@ export default function Tracker() {
       const stackInsights = generateStackInsights(userPreferences as any, userStack, weeklyLogs);
       const generatedInsights = generateCoachInsights(stackInsights);
       setCoachInsights(generatedInsights);
+      setCurrentInsightIndex(0);
     } catch (error: any) {
       console.error("Failed to load tracker data", error);
-      Alert.alert("Error", "Could not load today's stack.");
+      Alert.alert("Error", "Could not load tracker.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -127,7 +136,7 @@ export default function Tracker() {
       syncNotifications(user.id);
     } catch (error: any) {
       console.error("Toggle error", error);
-      Alert.alert("Error", "Could not save progress. Please try again.");
+      Alert.alert("Error", "Could not save progress.");
       setLogs(prev => ({
         ...prev,
         [logKey]: {
@@ -139,8 +148,6 @@ export default function Tracker() {
   };
 
   const totalCount = stack.length;
-  
-  // Progress calculations
   const todayTakenCount = stack.filter(item => logs[`${todayString}_${item.id}`]?.taken).length;
   
   const weeklyProgress = weekDates.map(date => {
@@ -148,7 +155,7 @@ export default function Tracker() {
     const percentage = totalCount > 0 ? (takenCountForDate / totalCount) * 100 : 0;
     return {
       date,
-      dayLabel: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }), // Mon, Tue
+      dayLabel: new Date(date).toLocaleDateString('en-US', { weekday: 'narrow' }), // M, T, W, etc.
       percentage,
       isToday: date === todayString,
       takenCountForDate,
@@ -173,28 +180,64 @@ export default function Tracker() {
     if (totalCount === 0) return null;
 
     let message = "";
+    let isComplete = false;
     
     if (blockTotal > 0) {
       if (blockRemaining === 0) {
-        message = `${currentBlock.charAt(0).toUpperCase() + currentBlock.slice(1)} stack complete ✓`;
+        message = `${currentBlock.charAt(0).toUpperCase() + currentBlock.slice(1)} routine completed`;
+        isComplete = true;
       } else if (blockTaken === 0) {
-        message = `${blockTotal} supplement${blockTotal > 1 ? 's' : ''} scheduled this ${currentBlock}`;
+        message = `${blockTotal} scheduled for this ${currentBlock}`;
       } else {
-        message = `${blockRemaining} supplement${blockRemaining > 1 ? 's' : ''} remaining this ${currentBlock}`;
+        message = `${blockRemaining} remaining this ${currentBlock}`;
       }
     } else {
       if (remainingCount === 0) {
-        message = "All daily supplements complete ✓";
+        message = "All routines completed for today";
+        isComplete = true;
       } else {
         message = `${remainingCount} supplement${remainingCount > 1 ? 's' : ''} remaining today`;
       }
     }
 
     return (
-      <View style={styles.reminderCard}>
-        <Text style={styles.reminderEmoji}>{blockRemaining === 0 && (blockTotal > 0 || remainingCount === 0) ? '✨' : '⏰'}</Text>
-        <Text style={styles.reminderText}>{message}</Text>
+      <View style={[styles.reminderCard, { backgroundColor: isComplete ? themeColors.backgroundSelected : themeColors.backgroundElement }]}>
+        <Ionicons 
+          name={isComplete ? "checkmark-circle" : "time-outline"} 
+          size={18} 
+          color={isComplete ? themeColors.success : themeColors.textSecondary} 
+          style={{ marginRight: 10 }}
+        />
+        <Text style={[styles.reminderText, { color: themeColors.text }]}>{message}</Text>
       </View>
+    );
+  };
+
+  const handleNextInsight = () => {
+    if (coachInsights.length <= 1) return;
+    setCurrentInsightIndex(prev => (prev + 1) % coachInsights.length);
+  };
+
+  const renderCoachInsight = () => {
+    if (coachInsights.length === 0) return null;
+    const insight = coachInsights[currentInsightIndex];
+
+    return (
+      <Pressable onPress={handleNextInsight}>
+        <SoftCard style={[styles.coachCard, { borderColor: themeColors.border }]}>
+          <View style={styles.coachHeader}>
+            <View style={styles.coachTitle}>
+              <Ionicons name="sparkles" size={14} color={themeColors.text} style={{ marginRight: 6 }} />
+              <Text style={[styles.coachLabel, { color: themeColors.text }]}>AI Clinical Insight</Text>
+            </View>
+            {coachInsights.length > 1 && (
+              <Ionicons name="swap-horizontal" size={14} color={themeColors.textMuted} />
+            )}
+          </View>
+          <Text style={[styles.coachTitle, { color: themeColors.text }]}>{insight.title}</Text>
+          <Text style={[styles.coachMessage, { color: themeColors.textSecondary }]}>{insight.message}</Text>
+        </SoftCard>
+      </Pressable>
     );
   };
 
@@ -207,10 +250,10 @@ export default function Tracker() {
     return (
       <View style={styles.section} key={timing}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>{title}</Text>
           {isPreferred && (
-            <View style={styles.preferredBadge}>
-              <Text style={styles.preferredBadgeText}>★ Preferred</Text>
+            <View style={[styles.preferredBadge, { backgroundColor: themeColors.backgroundSelected }]}>
+              <Text style={[styles.preferredBadgeText, { color: themeColors.textSecondary }]}>Preferred</Text>
             </View>
           )}
         </View>
@@ -226,11 +269,24 @@ export default function Tracker() {
               compact
               onPress={() => handleToggle(item)}
               rightAccessory={
-                <View style={[styles.checkbox, isTaken && styles.checkboxChecked]}>
-                  {isTaken && <Text style={styles.checkmark}>✓</Text>}
+                <View 
+                  style={[
+                    styles.checkbox, 
+                    { borderColor: themeColors.border },
+                    isTaken && { backgroundColor: themeColors.text, borderColor: themeColors.text }
+                  ]}
+                >
+                  {isTaken && <Ionicons name="checkmark" size={16} color={themeColors.background} />}
                 </View>
               }
-              style={isTaken ? styles.rowTaken : undefined}
+              style={[
+                {
+                  backgroundColor: themeColors.background,
+                  borderColor: themeColors.borderMuted,
+                  marginBottom: Spacing.sm,
+                },
+                isTaken && { opacity: 0.5 }
+              ]}
             />
           );
         })}
@@ -239,106 +295,141 @@ export default function Tracker() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+    <PageContainer 
+      scrollable 
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColors.text} />}
+    >
       <View style={styles.screenHeader}>
-        <Text style={styles.screenTitle}>Today's Stack</Text>
-        <Text style={styles.screenSubtitle}>
+        <Text style={[styles.screenTitle, { color: themeColors.text }]}>Tracker</Text>
+        <Text style={[styles.screenSubtitle, { color: themeColors.textSecondary }]}>
           {totalCount === 0 
-            ? "Your stack is empty. Add products from the Cabinet."
+            ? "Configure schedule in Stack to begin tracking."
             : `${todayTakenCount} of ${totalCount} completed today`}
         </Text>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        contentContainerStyle={styles.contentContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {coachInsights.length > 0 && <ElexirCoachCard insights={coachInsights} />}
-        
-        {renderReminderCard()}
-        
-        {totalCount > 0 && (
-          <View style={styles.weeklyCard}>
-            <Text style={styles.weeklyTitle}>Weekly Progress</Text>
-            <View style={styles.weeklyRow}>
-              {weeklyProgress.map((day) => (
-                <View key={day.date} style={styles.weeklyDay}>
-                  <Text style={[styles.weeklyDayLabel, day.isToday && styles.weeklyDayLabelToday]}>
-                    {day.dayLabel}
-                  </Text>
-                  <View style={styles.weeklyBarBackground}>
-                    <View 
-                      style={[
-                        styles.weeklyBarFill, 
-                        { height: `${day.percentage}%` },
-                        day.isToday && styles.weeklyBarFillToday
-                      ]} 
-                    />
-                  </View>
-                  <Text style={[styles.weeklyDayCount, day.isToday && styles.weeklyDayCountToday]}>
-                    {day.takenCountForDate}/{totalCount}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
+      {renderCoachInsight()}
+      {renderReminderCard()}
 
-        {totalCount > 0 ? (
-          <>
-            {renderSection("Morning", "morning")}
-            {renderSection("Afternoon", "afternoon")}
-            {renderSection("Evening", "evening")}
-            {renderSection("As Needed", "as_needed")}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateEmoji}>📋</Text>
-            <Text style={styles.emptyStateTitle}>No supplements yet</Text>
-            <Text style={styles.emptyStateText}>
-              Build your stack to start tracking daily supplements.
-            </Text>
+      {totalCount > 0 && (
+        <SoftCard style={styles.weeklyCard}>
+          <Text style={[styles.weeklyTitle, { color: themeColors.text }]}>Adherence History</Text>
+          <View style={styles.weeklyRow}>
+            {weeklyProgress.map((day) => (
+              <View key={day.date} style={styles.weeklyDay}>
+                <Text style={[styles.weeklyDayLabel, day.isToday && { color: themeColors.text, fontWeight: "700" }]}>
+                  {day.dayLabel}
+                </Text>
+                <View style={[styles.weeklyBarBackground, { backgroundColor: themeColors.backgroundElement }]}>
+                  <View 
+                    style={[
+                      styles.weeklyBarFill, 
+                      { 
+                        height: `${day.percentage || 4}%`,
+                        backgroundColor: day.isToday ? themeColors.text : themeColors.textMuted
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={[styles.weeklyDayCount, day.isToday && { color: themeColors.text, fontWeight: "700" }]}>
+                  {day.takenCountForDate}
+                </Text>
+              </View>
+            ))}
           </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+        </SoftCard>
+      )}
+
+      {totalCount > 0 ? (
+        <View style={{ paddingHorizontal: 24 }}>
+          {renderSection("Morning Routine", "morning")}
+          {renderSection("Afternoon Routine", "afternoon")}
+          {renderSection("Evening Routine", "evening")}
+          {renderSection("As Needed", "as_needed")}
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <View style={[styles.emptyIconContainer, { backgroundColor: themeColors.backgroundElement }]}>
+            <Ionicons name="checkmark-done" size={32} color={themeColors.textSecondary} />
+          </View>
+          <Text style={[styles.emptyStateTitle, { color: themeColors.text }]}>No Scheduled Items</Text>
+          <Text style={[styles.emptyStateText, { color: themeColors.textSecondary }]}>
+            Active formulations in your Daily Stack will appear here for daily tracking and optimization.
+          </Text>
+        </View>
+      )}
+    </PageContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FAF9F6" },
-  screenHeader: { paddingHorizontal: 24, paddingTop: 72, paddingBottom: 16 },
-  screenTitle: { fontSize: 34, fontWeight: "800", color: "#1C1C1E", letterSpacing: -1 },
-  screenSubtitle: { fontSize: 15, color: "#8E8E93", marginTop: 4 },
+  contentContainer: { paddingBottom: 120 },
+  screenHeader: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 24 },
+  screenTitle: { fontSize: 32, fontWeight: "800", letterSpacing: -0.5 },
+  screenSubtitle: { fontSize: 16, marginTop: 4, fontWeight: "500" },
 
-  content: { flex: 1 },
-  contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
+  coachCard: {
+    marginHorizontal: 24,
+    marginBottom: 20,
+    borderWidth: 1.5,
+  },
+  coachHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  coachHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  coachLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  coachTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 6,
+    letterSpacing: -0.2,
+  },
+  coachMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  reminderCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: BorderRadii.xl,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 24,
+    marginBottom: 20,
+  },
+  reminderText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
 
   weeklyCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 16,
+    marginHorizontal: 24,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
   },
   weeklyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#1C1C1E",
     marginBottom: 16,
+    letterSpacing: -0.2,
   },
   weeklyRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    height: 90,
+    height: 100,
   },
   weeklyDay: {
     alignItems: "center",
@@ -350,34 +441,22 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
     marginBottom: 8,
   },
-  weeklyDayLabelToday: {
-    color: "#1C1C1E",
-    fontWeight: "800",
-  },
   weeklyBarBackground: {
-    width: 8,
-    height: 50,
-    backgroundColor: "#F2F2F7",
-    borderRadius: 4,
+    width: 6,
+    height: 60,
+    borderRadius: 3,
     justifyContent: "flex-end",
+    overflow: "hidden",
   },
   weeklyBarFill: {
     width: "100%",
-    backgroundColor: "#C7C7CC",
-    borderRadius: 4,
-  },
-  weeklyBarFillToday: {
-    backgroundColor: "#1C1C1E",
+    borderRadius: 3,
   },
   weeklyDayCount: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     color: "#8E8E93",
     marginTop: 6,
-  },
-  weeklyDayCountToday: {
-    color: "#1C1C1E",
-    fontWeight: "800",
   },
 
   section: {
@@ -387,96 +466,56 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
-    marginLeft: 4,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#1C1C1E",
+    letterSpacing: -0.1,
   },
   preferredBadge: {
-    marginLeft: 12,
-    backgroundColor: "#F2F2F7",
+    marginLeft: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   preferredBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
-    color: "#1C1C1E",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   
-  reminderCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  reminderEmoji: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  reminderText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#1C1C1E",
-  },
-
   checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#E5E5EA",
-    backgroundColor: "#FFF",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#1C1C1E",
-    borderColor: "#1C1C1E",
-  },
-  checkmark: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-
-  rowTaken: {
-    opacity: 0.6,
   },
 
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 80,
-    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingHorizontal: 24,
   },
-  emptyStateEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
+  emptyIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.md,
   },
   emptyStateTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#1C1C1E",
     marginBottom: 8,
   },
   emptyStateText: {
-    fontSize: 15,
-    color: "#8E8E93",
+    fontSize: 14,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 20,
   },
 });

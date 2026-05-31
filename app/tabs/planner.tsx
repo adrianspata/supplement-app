@@ -3,26 +3,36 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
-  Image,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import { getUserStack, removeFromStack } from "../../lib/stack";
-import { UserStackItem } from "../../lib/types";
+import { getRecommendedProducts } from "../../lib/products";
+import { UserStackItem, RecommendedProduct } from "../../lib/types";
 import { useAuth } from "../../lib/auth-context";
 import { calculateMatch } from "../../lib/matching";
 import { supabase } from "../../lib/supabase";
-import { formatProductName, formatBrandName, formatGoalLabel, shouldDisplayField, getProductImageFallback } from "../../lib/productDisplay";
+import { formatProductName, formatGoalLabel } from "../../lib/productDisplay";
 import { ProductRow } from "../../src/components/ProductRow";
+import { PageContainer } from "../../src/components/ui/PageContainer";
+import { SurfaceCard } from "../../src/components/ui/SurfaceCard";
+import { PremiumButton } from "../../src/components/ui/PremiumButton";
+import { Colors, Spacing, BorderRadii, Typography, Shadows } from "../../src/constants/theme";
+import { useColorScheme } from "../../src/hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function StackScreen() {
   const router = useRouter();
+  const scheme = useColorScheme();
+  const colorScheme = scheme === "dark" ? "dark" : "light";
+  const themeColors = Colors[colorScheme];
+
   const { userPreferences } = useAuth();
   const [stackItems, setStackItems] = useState<UserStackItem[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<RecommendedProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -43,6 +53,18 @@ export default function StackScreen() {
     setLoading(true);
     const res = await getUserStack(userId);
     setStackItems(res);
+
+    if (res.length === 0) {
+      const recRes = await getRecommendedProducts(
+        userId,
+        userPreferences?.primary_goals || [],
+        userPreferences?.health_concerns || [],
+        userPreferences?.existing_supplements || [],
+        userPreferences?.diet_type
+      );
+      setRecommendedProducts(recRes);
+    }
+
     setLoading(false);
   };
 
@@ -74,27 +96,32 @@ export default function StackScreen() {
     const product = item.product;
     if (!product) return null;
 
-    const productGoals = product.product_goals?.length ? product.product_goals.map(g => g.goal) : (product.inferred_goals || []);
-    const match = calculateMatch(userPreferences?.primary_goals, userPreferences?.health_concerns, productGoals);
-
-    const removeButton = (
-      <Pressable style={styles.removeButton} onPress={() => handleRemove(item)} hitSlop={12}>
-        <Text style={styles.removeButtonText}>✕</Text>
-      </Pressable>
-    );
-
     return (
-      <ProductRow
-        key={item.id}
-        product={product}
-        match={match}
-        goals={productGoals}
-        onPress={() => router.push(`/product/${item.product_id}`)}
-        rightAccessory={removeButton}
-      />
+      <View key={item.id} style={styles.premiumListRow}>
+        <View style={styles.premiumListLeft}>
+          <View style={[styles.premiumProductImageWrapper, { backgroundColor: themeColors.backgroundSecondary }]}>
+             <Ionicons name="flask-outline" size={24} color={themeColors.textMuted} />
+          </View>
+          <View style={styles.premiumListTextContent}>
+            <Text style={[styles.premiumListTitle, { color: themeColors.text }]} numberOfLines={1}>{product.name}</Text>
+            <Text style={[styles.premiumListSubtitle, { color: themeColors.textSecondary }]} numberOfLines={1}>
+              {product.brand || product.category || "Supplement"}
+            </Text>
+          </View>
+        </View>
+        
+        {/* Neutral Status Action State */}
+        <Pressable 
+          style={styles.neutralStatusActionBtn} 
+          onPress={() => handleRemove(item)}
+          hitSlop={12}
+        >
+          <View style={styles.neutralStatusDot} />
+          <Ionicons name="close" size={14} color={themeColors.textSecondary} />
+        </Pressable>
+      </View>
     );
   };
-
   const morningItems = stackItems.filter(i => i.timing === 'morning');
   const afternoonItems = stackItems.filter(i => i.timing === 'afternoon');
   const eveningItems = stackItems.filter(i => i.timing === 'evening');
@@ -114,224 +141,377 @@ export default function StackScreen() {
   const supportedGoals = trackedGoals.filter(g => stackGoals.has(g));
   const lessCoverageGoals = trackedGoals.filter(g => !stackGoals.has(g));
 
-  const renderInsights = () => {
-    if (stackItems.length === 0 || trackedGoals.length === 0) return null;
+  if (loading && stackItems.length === 0) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator size="small" color={themeColors.text} />
+      </View>
+    );
+  }
+
+  const renderEmptyState = () => {
+    const primaryGoals = userPreferences?.primary_goals || [];
+    const goalsToUse = primaryGoals.length > 0 ? primaryGoals : ["sleep", "energy", "stress"];
+    
+    // Kept fallback structure unchanged
+    const fallbackSuggestions: Record<string, { title: string, reason: string }[]> = {
+      sleep: [
+        { title: "Magnesium", reason: "Supports relaxation and deep sleep" },
+        { title: "Glycine", reason: "Calms the brain and lowers body temperature" },
+        { title: "L-theanine", reason: "Promotes relaxation without drowsiness" }
+      ],
+      energy: [
+        { title: "Vitamin D", reason: "Crucial for sustained daily energy" },
+        { title: "B12", reason: "Essential for cellular energy production" },
+        { title: "Creatine", reason: "Supports physical and mental endurance" }
+      ],
+      stress: [
+        { title: "Magnesium", reason: "Helps regulate the nervous system" },
+        { title: "Ashwagandha", reason: "Adaptogen that lowers cortisol levels" },
+        { title: "L-theanine", reason: "Reduces anxiety and stress markers" }
+      ],
+      focus: [
+        { title: "Omega-3", reason: "Essential for cognitive function and memory" },
+        { title: "Creatine", reason: "Reduces mental fatigue during complex tasks" },
+        { title: "L-theanine", reason: "Improves attention when paired with caffeine" }
+      ],
+      recovery: [
+        { title: "Creatine", reason: "Accelerates muscle recovery post-workout" },
+        { title: "Magnesium", reason: "Relieves muscle tension and cramps" },
+        { title: "Protein", reason: "Provides building blocks for muscle repair" }
+      ],
+      "gut health": [
+        { title: "Probiotics", reason: "Maintains a healthy gut microbiome" },
+        { title: "Fiber", reason: "Feeds beneficial gut bacteria" },
+        { title: "Digestive enzymes", reason: "Helps break down and absorb nutrients" }
+      ]
+    };
 
     return (
-      <View style={styles.insightsContainer}>
-        {supportedGoals.length > 0 && (
-          <View style={[styles.insightGroup, lessCoverageGoals.length === 0 && { marginBottom: 0 }]}>
-            <Text style={styles.insightLabel}>Your Stack Supports</Text>
-            <View style={styles.chipRow}>
-              {supportedGoals.map(g => (
-                <View key={g} style={styles.chipSupported}>
-                  <Text style={styles.chipSupportedText}>✓ {formatGoalLabel(g)}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
+      <View style={styles.emptyContainer}>
+        <Text style={[styles.greetingTitle, { color: themeColors.text, textAlign: 'center', marginTop: 40 }]}>
+          No Scheduled Items
+        </Text>
+        <Text style={[styles.emptySubtitle, { color: themeColors.textSecondary }]}>
+          Schedule supplements to organize your daily routines.
+        </Text>
 
-        {lessCoverageGoals.length > 0 && (
-          <View style={[styles.insightGroup, { marginBottom: 0 }]}>
-            <Text style={styles.insightLabel}>Less Coverage</Text>
-            <View style={styles.chipRow}>
-              {lessCoverageGoals.map(g => (
-                <View key={g} style={styles.chipLacking}>
-                  <Text style={styles.chipLackingText}>• {formatGoalLabel(g)}</Text>
+        <View style={styles.recommendationsContainer}>
+          <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 16 }]}>
+            CURATED RECOMMENDATIONS
+          </Text>
+          
+          {recommendedProducts.length > 0 ? (
+            recommendedProducts.map(rec => (
+              <Pressable key={`rec-${rec.product.id}`} style={styles.premiumListRow} onPress={() => router.push(`/product/${rec.product.id}`)}>
+                <View style={styles.premiumListLeft}>
+                  <View style={[styles.premiumProductImageWrapper, { backgroundColor: themeColors.backgroundSecondary }]}>
+                    <Ionicons name="flask-outline" size={24} color={themeColors.textMuted} />
+                  </View>
+                  <View style={styles.premiumListTextContent}>
+                    <Text style={[styles.premiumListTitle, { color: themeColors.text }]} numberOfLines={1}>{rec.product.name}</Text>
+                    <Text style={[styles.premiumListSubtitle, { color: themeColors.textSecondary }]} numberOfLines={1}>{rec.reason || "Recommended"}</Text>
+                  </View>
                 </View>
-              ))}
-            </View>
-          </View>
-        )}
+                <View style={[styles.premiumListActionBtn, { borderColor: themeColors.border }]}>
+                  <Ionicons name="add" size={18} color={themeColors.text} />
+                </View>
+              </Pressable>
+            ))
+          ) : (
+            goalsToUse.slice(0, 2).map(goal => {
+              const normalizedGoal = goal.toLowerCase();
+              const matchKey = Object.keys(fallbackSuggestions).find(k => normalizedGoal.includes(k)) || "sleep";
+              const suggestions = fallbackSuggestions[matchKey];
+              
+              return (
+                <View key={goal} style={styles.goalGroup}>
+                  <Text style={[styles.sectionTitlePrimary, { color: themeColors.textMuted, marginBottom: 8, marginTop: 16 }]}>
+                    FOR {(formatGoalLabel(goal) || goal).toUpperCase()}
+                  </Text>
+                  {suggestions.map(s => (
+                    <Pressable key={s.title} style={styles.premiumListRow} onPress={() => router.push(`/product-search?q=${encodeURIComponent(s.title)}`)}>
+                      <View style={styles.premiumListLeft}>
+                        <View style={[styles.premiumProductImageWrapper, { backgroundColor: themeColors.backgroundSecondary }]}>
+                          <Ionicons name="search-outline" size={24} color={themeColors.textMuted} />
+                        </View>
+                        <View style={styles.premiumListTextContent}>
+                          <Text style={[styles.premiumListTitle, { color: themeColors.text }]} numberOfLines={1}>{s.title}</Text>
+                          <Text style={[styles.premiumListSubtitle, { color: themeColors.textSecondary }]} numberOfLines={1}>{s.reason}</Text>
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={themeColors.textMuted} />
+                    </Pressable>
+                  ))}
+                </View>
+              );
+            })
+          )}
+          
+          <Pressable style={styles.heroActionBtn} onPress={() => router.push("/product-search")}>
+            <Text style={[styles.heroActionText, { color: themeColors.text }]}>Search Products</Text>
+            <Ionicons name="arrow-forward" size={14} color={themeColors.textSecondary} style={{ marginLeft: 8 }} />
+          </Pressable>
+        </View>
       </View>
     );
   };
 
-  const renderTimingSection = (title: string, emoji: string, items: UserStackItem[]) => {
+  const renderTimelineSection = (title: string, subtitle: string, items: UserStackItem[], icon: keyof typeof Ionicons.glyphMap) => {
     if (items.length === 0) return null;
     return (
-      <View style={styles.sectionContainer} key={title}>
-        <Text style={styles.sectionTitle}>{emoji} {title} <Text style={styles.sectionCount}>({items.length})</Text></Text>
-        <View style={styles.verticalListContainer}>
+      <View style={styles.timelineSection}>
+        <View style={styles.timelineSectionHeader}>
+          <Ionicons name={icon} size={18} color={themeColors.text} style={{ marginRight: 12, marginTop: 2 }} />
+          <View>
+            <Text style={[styles.timelineSectionTitle, { color: themeColors.text }]}>{title}</Text>
+            <Text style={[styles.timelineSectionSubtitle, { color: themeColors.textSecondary }]}>{subtitle}</Text>
+          </View>
+        </View>
+        <View style={styles.timelineSectionContent}>
           {items.map(renderProductRow)}
         </View>
       </View>
     );
   };
 
-  if (loading && stackItems.length === 0) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1C1C1E" />
-      </View>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.screenHeader}>
-          <Text style={styles.screenTitle}>My Daily Stack</Text>
-          <Text style={styles.screenSubtitle}>
-            {stackItems.length} {stackItems.length === 1 ? "supplement" : "supplements"} scheduled
-          </Text>
+    <PageContainer scrollable contentContainerStyle={styles.scrollContent}>
+      {/* 1. GREETING SECTION (Aligned with Today screen) */}
+      <View style={styles.greetingHeader}>
+        <View>
+          <Text style={[styles.greetingSub, { color: themeColors.textSecondary }]}>PROTOCOL</Text>
+          <Text style={[styles.greetingTitle, { color: themeColors.text }]}>Today's Stack</Text>
+          <Text style={[styles.greetingDesc, { color: themeColors.textSecondary }]}>Your active supplement routines</Text>
         </View>
+        <Pressable style={[styles.headerActionCircle, { backgroundColor: themeColors.backgroundSecondary }]} onPress={() => router.push("/assistant?type=stack")}>
+          <Ionicons name="sparkles" size={20} color={themeColors.text} />
+        </Pressable>
+      </View>
 
-        {stackItems.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>Your stack is empty</Text>
-            <Text style={styles.emptySubtitle}>
-              Find products in the Cabinet or Search, and tap "Add to Stack" to organize your daily routine.
-            </Text>
-          </View>
-        ) : (
-          <>
-            <Pressable 
-              style={styles.askButton} 
-              onPress={() => router.push("/assistant?type=stack")}
+      {stackItems.length === 0 ? (
+        renderEmptyState()
+      ) : (
+        <View style={styles.contentWrapper}>
+          
+          {/* 2. HERO CARD: Today's Protocol */}
+          <View style={styles.heroWrapper}>
+            <LinearGradient
+              colors={colorScheme === 'dark' ? ['#1A2518', '#111111'] : ['#F0FDF4', '#FFFFFF']}
+              style={styles.heroCard}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
-              <View style={styles.askButtonIcon}>
-                <Text style={{ fontSize: 16 }}>✨</Text>
+              <View style={styles.heroContentRow}>
+                <View style={styles.heroLeft}>
+                  <Text style={[styles.heroSuperTitle, { color: themeColors.textSecondary }]}>DAILY COVERAGE</Text>
+                  <Text style={[styles.heroMainTitle, { color: themeColors.text }]}>
+                    {stackItems.length} Active {stackItems.length === 1 ? "Item" : "Items"}
+                  </Text>
+                  <Text style={[styles.heroBodyText, { color: themeColors.textSecondary }]}>
+                    Supporting {supportedGoals.length} of your {trackedGoals.length} health goals.
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.askButtonTitle}>Ask Elexir</Text>
-                <Text style={styles.askButtonSubtitle}>Understand your stack coverage</Text>
-              </View>
-              <Text style={styles.askChevron}>›</Text>
-            </Pressable>
 
-            {renderInsights()}
-            {renderTimingSection("Morning", "☀️", morningItems)}
-            {renderTimingSection("Afternoon", "🌤️", afternoonItems)}
-            {renderTimingSection("Evening", "🌙", eveningItems)}
-            {renderTimingSection("As Needed", "⭐", asNeededItems)}
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+              <Pressable style={[styles.heroActionBtn, { backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]} onPress={() => router.push("/assistant?type=stack")}>
+                <Ionicons name="sparkles" size={16} color={themeColors.text} style={{ marginRight: 8 }} />
+                <Text style={[styles.heroActionText, { color: themeColors.text }]}>Analyze daily synergies</Text>
+                <Ionicons name="chevron-forward" size={14} color={themeColors.textSecondary} style={{ marginLeft: 'auto' }} />
+              </Pressable>
+            </LinearGradient>
+          </View>
+
+          {/* 3. TIMELINE SECTIONS */}
+          <View style={styles.timelineList}>
+            {renderTimelineSection("Morning Routine", "Early day stack", morningItems, "sunny-outline")}
+            {renderTimelineSection("Afternoon Routine", "Mid-day focus", afternoonItems, "partly-sunny-outline")}
+            {renderTimelineSection("Evening Routine", "Night recovery", eveningItems, "moon-outline")}
+            {renderTimelineSection("As Needed", "Symptom relief", asNeededItems, "pulse-outline")}
+          </View>
+
+        </View>
+      )}
+    </PageContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FAF9F6" },
-  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FAF9F6" },
-  scrollContent: { paddingBottom: 100 },
-  screenHeader: { paddingHorizontal: 24, paddingTop: 72, paddingBottom: 24 },
-  screenTitle: { fontSize: 34, fontWeight: "800", color: "#1C1C1E", letterSpacing: -1 },
-  screenSubtitle: { fontSize: 15, color: "#8E8E93", marginTop: 2 },
-  
-  sectionContainer: { marginBottom: 32 },
-  sectionTitle: { fontSize: 14, fontWeight: "700", color: "#8E8E93", marginLeft: 24, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 },
-  sectionCount: { color: "#8E8E93", fontWeight: "600" },
-  verticalListContainer: { paddingHorizontal: 24, gap: 0 },
-  
-  removeButton: {
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  scrollContent: { paddingBottom: 140 },
+  contentWrapper: {},
+
+  // Premium List Rows
+  premiumListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  premiumListLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  premiumProductImageWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  premiumListTextContent: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  premiumListTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  premiumListSubtitle: {
+    fontSize: 13,
+  },
+  premiumListActionBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#F2F2F7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  removeButtonText: { fontSize: 12, fontWeight: "700", color: "#8E8E93" },
-
-  emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, paddingTop: 60 },
-  emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#1C1C1E", marginBottom: 8 },
-  emptySubtitle: { fontSize: 15, color: "#8E8E93", textAlign: "center", lineHeight: 22 },
-
-  insightsContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 24,
-    marginBottom: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    marginLeft: 16,
   },
-  insightGroup: {
-    marginBottom: 20,
-  },
-  insightLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#8E8E93",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  neutralStatusActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 100,
+    backgroundColor: 'rgba(0,0,0,0.04)',
     gap: 8,
   },
-  chipSupported: {
-    backgroundColor: "#E8F5E9",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
+  neutralStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#8E8E93',
   },
-  chipSupportedText: {
-    color: "#2E7D32",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  chipLacking: {
-    backgroundColor: "#F2F2F7",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-  },
-  chipLackingText: {
-    color: "#8E8E93",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  askButton: {
-    marginHorizontal: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
+
+  // Greeting Header
+  greetingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    paddingTop: Spacing.xl,
   },
-  askButtonIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FDF4E6",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
+  greetingSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 4,
   },
-  askButtonTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1C1C1E",
+  greetingTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginBottom: 4,
+  },
+  greetingDesc: {
+    fontSize: 14,
+  },
+  headerActionCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Hero Card
+  heroWrapper: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  heroCard: {
+    borderRadius: BorderRadii.xl,
+    padding: 24,
+    ...Shadows.floating,
+  },
+  heroContentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  heroLeft: {
+    flex: 1,
+  },
+  heroSuperTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  heroMainTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  heroBodyText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  heroActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadii.lg,
+  },
+  heroActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Timelines
+  timelineList: {
+    paddingHorizontal: 24,
+    gap: 32,
+  },
+  timelineSection: {
+    gap: 16,
+  },
+  timelineSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  timelineSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
     marginBottom: 2,
   },
-  askButtonSubtitle: {
+  timelineSectionSubtitle: {
     fontSize: 13,
-    color: "#8E8E93",
   },
-  askChevron: {
-    marginLeft: "auto",
-    fontSize: 24,
-    color: "#C7C7CC",
+  timelineSectionContent: {
+    gap: 0,
   },
+
+  // Empty State & Recommendations
+  emptyContainer: { flex: 1, paddingHorizontal: 24 },
+  emptySubtitle: { textAlign: "center", lineHeight: 20, marginBottom: 40, marginTop: 8 },
+  recommendationsContainer: { width: "100%" },
+  sectionTitlePrimary: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  goalGroup: { width: "100%", marginBottom: Spacing.lg },
 });
