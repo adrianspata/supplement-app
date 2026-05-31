@@ -10,10 +10,14 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "../lib/auth-context";
 import { AssistantMessage, generateAssistantResponse, AssistantContextType } from "../lib/assistant";
+import { PageContainer } from "../src/components/ui/PageContainer";
+import { SoftCard } from "../src/components/ui/SoftCard";
+import { Colors, BorderRadii, Spacing, Shadows, Typography } from "../src/constants/theme";
+import { useColorScheme } from "../src/hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function AssistantScreen() {
   const router = useRouter();
@@ -27,7 +31,7 @@ export default function AssistantScreen() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm Elexir's AI Assistant. I can explain why products are recommended, break down your Elexir Scores, and analyze your stack coverage. How can I help you today?"
+      content: "Hi. I'm your Clinical Assistant.\nI can explain recommendations, break down your scores, and analyze your stack coverage. How can I help you today?"
     }
   ]);
   const [input, setInput] = useState("");
@@ -81,19 +85,28 @@ export default function AssistantScreen() {
   const SUGGESTED_CHIPS = [
     "Why was this recommended?",
     "Why is my score 87?",
-    "What does this ingredient do?",
-    "Why is Gut Health low coverage?",
-    "What does my stack support?",
+    "Ingredient breakdown",
+    "Missing areas in my stack?",
   ];
 
+  const scheme = useColorScheme();
+  const colorScheme = scheme === 'dark' ? 'dark' : 'light';
+  const themeColors = Colors[colorScheme];
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-      {/* Header */}
+    <PageContainer scrollable={false}>
+      {/* Premium Minimal Header */}
       <View style={styles.header}>
-        <Pressable style={styles.closeBtn} onPress={() => router.back()}>
-          <Text style={styles.closeBtnText}>✕</Text>
+        <Pressable 
+          style={[styles.iconButton, { backgroundColor: themeColors.backgroundElement }]} 
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-down" size={20} color={themeColors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Ask Elexir</Text>
+        <View style={styles.headerTitleContainer}>
+          <Ionicons name="sparkles" size={14} color={themeColors.text} />
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Intelligence Layer</Text>
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -105,31 +118,58 @@ export default function AssistantScreen() {
           ref={scrollViewRef}
           style={styles.chatArea} 
           contentContainerStyle={styles.chatContent}
+          showsVerticalScrollIndicator={false}
         >
-          {messages.map(msg => (
-            <View 
-              key={msg.id} 
-              style={[
-                styles.messageBubble, 
-                msg.role === 'user' ? styles.userBubble : styles.assistantBubble
-              ]}
-            >
-              <Text style={[
-                styles.messageText, 
-                msg.role === 'user' ? styles.userText : styles.assistantText
-              ]}>
-                {msg.content}
-              </Text>
-            </View>
-          ))}
+          {messages.map((msg, index) => {
+            const isFirst = index === 0;
+
+            if (msg.role === 'user') {
+              return (
+                <View key={msg.id} style={styles.userQueryContainer}>
+                  <Text style={[styles.userQueryText, { color: themeColors.text }]}>
+                    {msg.content}
+                  </Text>
+                </View>
+              );
+            }
+
+            if (isFirst) {
+              return (
+                <View key={msg.id} style={styles.heroContainer}>
+                  <View style={[styles.heroIconCircle, { backgroundColor: themeColors.backgroundSelected }]}>
+                    <Ionicons name="sparkles" size={32} color={themeColors.text} />
+                  </View>
+                  <Text style={[styles.heroText, { color: themeColors.text }]}>{msg.content}</Text>
+                </View>
+              );
+            }
+
+            return (
+              <SoftCard key={msg.id} style={[styles.aiResponseCard, { backgroundColor: themeColors.background }]}>
+                <View style={styles.aiHeader}>
+                  <Ionicons name="sparkles" size={14} color={themeColors.text} />
+                  <Text style={[styles.aiTitle, { color: themeColors.text }]}>Elexir AI</Text>
+                </View>
+                <Text style={[styles.aiResponseText, { color: themeColors.text }]}>
+                  {msg.content}
+                </Text>
+              </SoftCard>
+            );
+          })}
+          
           {loading && (
-            <View style={[styles.messageBubble, styles.assistantBubble, styles.typingBubble]}>
-              <ActivityIndicator size="small" color="#8E8E93" />
+            <View style={styles.loadingContainer}>
+              <View style={styles.aiHeader}>
+                <Ionicons name="sparkles" size={14} color={themeColors.text} />
+                <Text style={[styles.aiTitle, { color: themeColors.text }]}>Thinking</Text>
+              </View>
+              <ActivityIndicator size="small" color={themeColors.text} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
             </View>
           )}
         </ScrollView>
 
-        <View style={styles.inputArea}>
+        {/* Floating Input Area */}
+        <View style={styles.bottomArea}>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false} 
@@ -139,150 +179,203 @@ export default function AssistantScreen() {
             {SUGGESTED_CHIPS.map(chip => (
               <Pressable 
                 key={chip} 
-                style={styles.chip}
+                style={[
+                  styles.chip, 
+                  { 
+                    backgroundColor: themeColors.background,
+                    borderColor: themeColors.borderMuted,
+                    ...Shadows.low
+                  }
+                ]}
                 onPress={() => handleSend(chip)}
                 disabled={loading}
               >
-                <Text style={styles.chipText}>{chip}</Text>
+                <Text style={[styles.chipText, { color: themeColors.textSecondary }]}>{chip}</Text>
               </Pressable>
             ))}
           </ScrollView>
 
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Ask anything..."
-              placeholderTextColor="#8E8E93"
-              value={input}
-              onChangeText={setInput}
-              onSubmitEditing={() => handleSend(input)}
-              returnKeyType="send"
-              editable={!loading}
-            />
-            <Pressable 
-              style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.5 }]}
-              onPress={() => handleSend(input)}
-              disabled={!input.trim() || loading}
-            >
-              <Text style={styles.sendBtnIcon}>↑</Text>
-            </Pressable>
+          <View style={styles.inputPillContainer}>
+            <View style={[
+              styles.inputPill, 
+              { 
+                backgroundColor: themeColors.background, 
+                borderColor: themeColors.borderMuted,
+                shadowColor: '#000',
+              }
+            ]}>
+              <TextInput
+                style={[styles.textInput, { color: themeColors.text }]}
+                placeholder="Ask anything..."
+                placeholderTextColor={themeColors.textMuted}
+                value={input}
+                onChangeText={setInput}
+                onSubmitEditing={() => handleSend(input)}
+                returnKeyType="send"
+                editable={!loading}
+              />
+              <Pressable 
+                style={[
+                  styles.sendBtn, 
+                  { backgroundColor: themeColors.text }, 
+                  (!input.trim() || loading) && { opacity: 0.2 }
+                ]}
+                onPress={() => handleSend(input)}
+                disabled={!input.trim() || loading}
+              >
+                <Ionicons name="arrow-up" size={18} color={themeColors.background} />
+              </Pressable>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </PageContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FAF9F6" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
-  closeBtn: {
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#EBEAE4",
     alignItems: "center",
     justifyContent: "center",
   },
-  closeBtnText: { fontSize: 18, color: "#1C1C1E", fontWeight: "600" },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: "#1C1C1E" },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerTitle: { 
+    fontSize: 14, 
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
   placeholder: { width: 40, height: 40 },
   keyboardView: { flex: 1 },
   chatArea: { flex: 1 },
-  chatContent: { padding: 16, paddingBottom: 32 },
-  messageBubble: {
-    maxWidth: "85%",
-    padding: 16,
-    borderRadius: 20,
-    marginBottom: 12,
+  chatContent: { paddingHorizontal: 24, paddingBottom: 40, paddingTop: 20 },
+  
+  heroContainer: {
+    alignItems: "center",
+    paddingVertical: 60,
+    marginBottom: 20,
   },
-  userBubble: {
-    alignSelf: "flex-end",
-    backgroundColor: "#1C1C1E",
-    borderBottomRightRadius: 4,
+  heroIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
   },
-  assistantBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
-    borderBottomLeftRadius: 4,
-  },
-  typingBubble: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignSelf: "flex-start",
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  userText: {
-    color: "#FFFFFF",
-  },
-  assistantText: {
-    color: "#1C1C1E",
-  },
-  inputArea: {
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.05)",
-    paddingBottom: Platform.OS === 'ios' ? 0 : 16,
-  },
-  chipsScroll: {
-    paddingVertical: 12,
-  },
-  chipsContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  chip: {
-    backgroundColor: "#F2F2F7",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 100,
-  },
-  chipText: {
-    color: "#1C1C1E",
-    fontSize: 14,
+  heroText: {
+    fontSize: 24,
     fontWeight: "500",
+    lineHeight: 34,
+    textAlign: "center",
+    letterSpacing: -0.3,
   },
-  inputRow: {
+
+  userQueryContainer: {
+    alignSelf: "flex-end",
+    marginBottom: 32,
+    marginTop: 16,
+    maxWidth: "90%",
+  },
+  userQueryText: {
+    fontSize: 22,
+    fontWeight: "600",
+    lineHeight: 30,
+    letterSpacing: -0.4,
+    textAlign: "right",
+  },
+
+  aiResponseCard: {
+    marginBottom: 32,
+    padding: 24,
+    borderRadius: BorderRadii.xl,
+    borderWidth: 0,
+    ...Shadows.premium,
+  },
+  aiHeader: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  aiTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  aiResponseText: {
+    fontSize: 16,
+    lineHeight: 26,
+    fontWeight: "400",
+  },
+
+  loadingContainer: {
+    padding: 24,
+    marginBottom: 32,
+  },
+
+  bottomArea: {
+    paddingBottom: Platform.OS === 'ios' ? 32 : 24,
+  },
+  chipsScroll: {
+    marginBottom: 16,
+  },
+  chipsContent: {
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  chip: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    paddingTop: 4,
-    gap: 12,
+    paddingVertical: 12,
+    borderRadius: 100,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  inputPillContainer: {
+    paddingHorizontal: 24,
+  },
+  inputPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    paddingLeft: 20,
+    paddingRight: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 4,
   },
   textInput: {
     flex: 1,
-    height: 44,
-    backgroundColor: "#F2F2F7",
-    borderRadius: 22,
-    paddingHorizontal: 16,
     fontSize: 16,
-    color: "#1C1C1E",
+    fontWeight: "500",
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#1C1C1E",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-  },
-  sendBtnIcon: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontWeight: "700",
+    marginLeft: 12,
   },
 });

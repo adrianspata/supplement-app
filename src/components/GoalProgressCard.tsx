@@ -1,96 +1,91 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { formatGoalLabel } from '../../lib/productDisplay';
+import { SoftCard } from './ui/SoftCard';
+import { Colors } from '../constants/theme';
+import { useColorScheme } from '../hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
 
 interface GoalProgressCardProps {
   goals?: string[] | null;
   goalStatus?: Record<string, 'improving' | 'stable' | 'needs_attention'>;
 }
 
-const GOAL_ICONS: Record<string, string> = {
-  sleep: '🌙',
-  energy: '⚡️',
-  stress: '🧘',
-  focus: '🧠',
-  recovery: '🔋',
-  gut_health: '🦠',
-  immunity: '🛡️',
-  bone_health: '🦴',
-  heart_health: '❤️',
-  brain_health: '🧠',
-  hair: '✨',
-  skin: '✨',
-  hormones: '⚖️',
-  joints: '🦴'
+const GOAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  sleep: 'moon-outline',
+  energy: 'flash-outline',
+  stress: 'leaf-outline',
+  focus: 'eye-outline',
+  recovery: 'battery-charging-outline',
+  gut_health: 'medkit-outline',
+  immunity: 'shield-outline',
+  bone_health: 'body-outline',
+  heart_health: 'heart-outline',
+  brain_health: 'bulb-outline',
+  hair: 'sparkles-outline',
+  skin: 'sparkles-outline',
+  hormones: 'scale-outline',
+  joints: 'body-outline'
 };
 
 export function GoalProgressCard({ goals, goalStatus = {} }: GoalProgressCardProps) {
+  const scheme = useColorScheme();
+  const colorScheme = scheme === 'dark' ? 'dark' : 'light';
+  const themeColors = Colors[colorScheme];
   const displayGoals = goals && goals.length > 0 ? goals : ['sleep', 'energy', 'stress'];
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.header}>Health Progress</Text>
+    <SoftCard style={styles.card}>
+      <Text style={[styles.header, { color: themeColors.textMuted }]}>Health Progress</Text>
       <View style={styles.goalsContainer}>
         {displayGoals.map((goal, i) => {
           const label = formatGoalLabel(goal) || goal;
-          const icon = GOAL_ICONS[goal.toLowerCase()] || '✨';
+          const iconName = GOAL_ICONS[goal.toLowerCase()] || 'sparkles-outline';
           const status = goalStatus[goal] || 'stable';
           
           let statusText = 'Stable';
-          let statusColor = '#FF9500';
-          let trend = '→';
+          let statusColor: string = themeColors.warning;
+          let trendIcon: keyof typeof Ionicons.glyphMap = 'arrow-forward-outline';
 
           if (status === 'improving') {
             statusText = 'Improving';
-            statusColor = '#34C759';
-            trend = '↗';
+            statusColor = themeColors.success;
+            trendIcon = 'trending-up-outline';
           } else if (status === 'needs_attention') {
             statusText = 'Needs attention';
-            statusColor = '#FF3B30';
-            trend = '↘';
+            statusColor = themeColors.error;
+            trendIcon = 'trending-down-outline';
           }
 
           return (
-            <View key={i} style={[styles.goalRow, i === displayGoals.length - 1 && styles.lastRow]}>
+            <View key={i} style={[styles.goalRow, i === displayGoals.length - 1 && styles.lastRow, { borderBottomColor: themeColors.borderMuted }]}>
               <View style={styles.goalInfo}>
-                <View style={styles.iconContainer}>
-                  <Text style={styles.icon}>{icon}</Text>
+                <View style={[styles.iconContainer, { backgroundColor: themeColors.backgroundSecondary }]}>
+                  <Ionicons name={iconName} size={16} color={themeColors.textSecondary} />
                 </View>
-                <Text style={styles.goalLabel}>{label}</Text>
+                <Text style={[styles.goalLabel, { color: themeColors.text }]}>{label}</Text>
               </View>
               <View style={styles.statusInfo}>
                 <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
-                <Text style={[styles.trend, { color: statusColor }]}>{trend}</Text>
+                <Ionicons name={trendIcon} size={16} color={statusColor} />
               </View>
             </View>
           );
         })}
       </View>
-    </View>
+    </SoftCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    marginHorizontal: 24,
   },
   header: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#8E8E93',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     marginBottom: 16,
   },
   goalsContainer: {
@@ -102,7 +97,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
   },
   lastRow: {
     borderBottomWidth: 0,
@@ -117,17 +111,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: '#F2F2F7',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  icon: {
-    fontSize: 16,
-  },
   goalLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1C1C1E',
   },
   statusInfo: {
     flexDirection: 'row',

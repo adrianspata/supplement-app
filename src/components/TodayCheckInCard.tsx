@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { getTodayCheckIn, upsertTodayCheckIn } from '../../lib/checkins';
 import { DailyCheckIn } from '../../lib/types';
+import { SoftCard } from './ui/SoftCard';
+import { Colors } from '../constants/theme';
+import { useColorScheme } from '../hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
 
 interface TodayCheckInCardProps {
   userId: string;
@@ -11,6 +15,9 @@ export function TodayCheckInCard({ userId }: TodayCheckInCardProps) {
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const scheme = useColorScheme();
+  const colorScheme = scheme === 'dark' ? 'dark' : 'light';
+  const themeColors = Colors[colorScheme];
 
   useEffect(() => {
     async function loadCheckIn() {
@@ -43,14 +50,14 @@ export function TodayCheckInCard({ userId }: TodayCheckInCardProps) {
     setSaving(false);
   };
 
-  const renderMetric = (label: string, metric: 'sleep_score' | 'energy_score' | 'stress_score', emoji: string) => {
+  const renderMetric = (label: string, metric: 'sleep_score' | 'energy_score' | 'stress_score', iconName: keyof typeof Ionicons.glyphMap) => {
     const currentScore = checkIn?.[metric] || 0;
     
     return (
       <View style={styles.metricRow}>
         <View style={styles.metricLabelContainer}>
-          <Text style={styles.metricEmoji}>{emoji}</Text>
-          <Text style={styles.metricLabel}>{label}</Text>
+          <Ionicons name={iconName} size={16} color={themeColors.textSecondary} />
+          <Text style={[styles.metricLabel, { color: themeColors.text }]}>{label}</Text>
         </View>
         <View style={styles.ratingContainer}>
           {[1, 2, 3, 4, 5].map((val) => (
@@ -58,14 +65,23 @@ export function TodayCheckInCard({ userId }: TodayCheckInCardProps) {
               key={val}
               style={[
                 styles.ratingBubble,
-                currentScore === val && styles.ratingBubbleActive
+                { 
+                  backgroundColor: themeColors.backgroundSecondary,
+                  borderColor: themeColors.border,
+                  borderWidth: 1 
+                },
+                currentScore === val && { 
+                  backgroundColor: themeColors.text,
+                  borderColor: themeColors.text
+                }
               ]}
               onPress={() => handleScoreChange(metric, val)}
               disabled={saving}
             >
               <Text style={[
                 styles.ratingText,
-                currentScore === val && styles.ratingTextActive
+                { color: themeColors.textSecondary },
+                currentScore === val && { color: themeColors.background }
               ]}>
                 {val}
               </Text>
@@ -78,38 +94,27 @@ export function TodayCheckInCard({ userId }: TodayCheckInCardProps) {
 
   if (loading) {
     return (
-      <View style={[styles.card, styles.center]}>
-        <ActivityIndicator color="#1C1C1E" />
-      </View>
+      <SoftCard style={[styles.card, styles.center]}>
+        <ActivityIndicator color={themeColors.text} />
+      </SoftCard>
     );
   }
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.header}>How are you feeling today?</Text>
+    <SoftCard style={styles.card}>
+      <Text style={[styles.header, { color: themeColors.textMuted }]}>How are you feeling today?</Text>
       <View style={styles.metricsContainer}>
-        {renderMetric('Sleep', 'sleep_score', '🌙')}
-        {renderMetric('Energy', 'energy_score', '⚡️')}
-        {renderMetric('Stress', 'stress_score', '🧘')}
+        {renderMetric('Sleep', 'sleep_score', 'moon-outline')}
+        {renderMetric('Energy', 'energy_score', 'flash-outline')}
+        {renderMetric('Stress', 'stress_score', 'leaf-outline')}
       </View>
-    </View>
+    </SoftCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-    marginHorizontal: 24,
   },
   center: {
     alignItems: 'center',
@@ -117,11 +122,10 @@ const styles = StyleSheet.create({
     minHeight: 120,
   },
   header: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#8E8E93',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     marginBottom: 16,
   },
   metricsContainer: {
@@ -138,13 +142,9 @@ const styles = StyleSheet.create({
     gap: 8,
     width: 80,
   },
-  metricEmoji: {
-    fontSize: 16,
-  },
   metricLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1C1C1E',
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -154,19 +154,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F2F2F7',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  ratingBubbleActive: {
-    backgroundColor: '#1C1C1E',
   },
   ratingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#8E8E93',
-  },
-  ratingTextActive: {
-    color: '#FFF',
   },
 });

@@ -1,6 +1,10 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { StackInsightsResult } from "../../lib/insights";
+import { SoftCard } from "./ui/SoftCard";
+import { Colors } from "../constants/theme";
+import { useColorScheme } from "../hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 
 interface DailyInsightCardProps {
   insights: StackInsightsResult | null;
@@ -8,91 +12,87 @@ interface DailyInsightCardProps {
 }
 
 export function DailyInsightCard({ insights, onPressWeekly }: DailyInsightCardProps) {
+  const scheme = useColorScheme();
+  const colorScheme = scheme === 'dark' ? 'dark' : 'light';
+  const themeColors = Colors[colorScheme];
+
   if (!insights) return null;
 
   return (
-    <View style={styles.container}>
+    <SoftCard style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Daily Insight</Text>
+        <Ionicons name="sparkles" size={14} color={themeColors.text} />
+        <Text style={[styles.headerTitle, { color: themeColors.text }]}>AI Overview</Text>
       </View>
 
       <View style={styles.content}>
         {/* Health Summary */}
-        <Text style={styles.healthSummary}>{insights.healthSummary}</Text>
+        <Text style={[styles.healthSummary, { color: themeColors.text }]}>{insights.healthSummary}</Text>
 
         {/* What's Going Well */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>What's Going Well</Text>
+          <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>Diagnostic Strengths</Text>
           {insights.goingWell.map((item, idx) => (
             <View key={idx} style={styles.listItem}>
-              <Text style={styles.bulletPoint}>•</Text>
-              <Text style={styles.listText}>{item}</Text>
+              <Ionicons name="checkmark-circle-outline" size={14} color={themeColors.success} style={styles.bullet} />
+              <Text style={[styles.listText, { color: themeColors.textSecondary }]}>{item}</Text>
             </View>
           ))}
         </View>
 
         {/* Focus Area */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Focus Area</Text>
+          <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>Actionable Risks</Text>
           {insights.focusArea.map((item, idx) => (
             <View key={idx} style={styles.listItem}>
-              <Text style={styles.bulletPoint}>•</Text>
-              <Text style={styles.listText}>{item}</Text>
+              <Ionicons name="alert-circle-outline" size={14} color={themeColors.warning} style={styles.bullet} />
+              <Text style={[styles.listText, { color: themeColors.textSecondary }]}>{item}</Text>
             </View>
           ))}
         </View>
 
         {/* Recommended Action */}
         <View style={[styles.section, styles.lastSection]}>
-          <Text style={styles.sectionTitle}>Recommended Action</Text>
-          <View style={styles.actionBadge}>
-            <Text style={styles.actionText}>{insights.recommendedAction}</Text>
-          </View>
+          <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>Suggested Intervention</Text>
+          {insights.recommendedAction && (
+            <View style={[styles.actionBadge, { backgroundColor: themeColors.backgroundSelected }]}>
+              <Text style={[styles.actionText, { color: themeColors.text }]}>{insights.recommendedAction}</Text>
+            </View>
+          )}
         </View>
       </View>
-    </View>
+    </SoftCard>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginHorizontal: 24,
+  card: {
     marginBottom: 24,
-    backgroundColor: "#FDFDFD",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    padding: 0,
     overflow: "hidden",
   },
   header: {
-    backgroundColor: "#FDF4E6",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.04)",
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#D97706", // warm amber
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 1.2,
   },
   content: {
-    padding: 20,
+    padding: 24,
   },
   healthSummary: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#1C1C1E",
-    lineHeight: 28,
+    fontSize: 19,
+    fontWeight: "600",
+    lineHeight: 26,
     marginBottom: 24,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   section: {
     marginBottom: 20,
@@ -101,41 +101,36 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#8E8E93",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
+    letterSpacing: 1.0,
+    marginBottom: 10,
   },
   listItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 6,
+    marginBottom: 8,
+    gap: 8,
   },
-  bulletPoint: {
-    fontSize: 15,
-    color: "#3F3F46",
-    marginRight: 8,
-    marginTop: 1,
+  bullet: {
+    marginTop: 2,
   },
   listText: {
     flex: 1,
-    fontSize: 15,
-    color: "#3F3F46",
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
   },
   actionBadge: {
-    backgroundColor: "#1C1C1E",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 16,
     marginTop: 4,
   },
   actionText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
     textAlign: "center",
+    letterSpacing: -0.1,
   },
 });

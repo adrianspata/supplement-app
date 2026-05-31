@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { CoachInsight } from "../../lib/coach";
+import { Colors, Spacing, BorderRadii } from "../constants/theme";
+import { useColorScheme } from "../hooks/use-color-scheme";
+import { Ionicons } from "@expo/vector-icons";
 
 interface ElexirCoachCardProps {
   insights: CoachInsight[];
@@ -8,10 +11,12 @@ interface ElexirCoachCardProps {
 
 export function ElexirCoachCard({ insights }: ElexirCoachCardProps) {
   const [currentInsight, setCurrentInsight] = useState<CoachInsight | null>(null);
+  const scheme = useColorScheme();
+  const colorScheme = scheme === 'dark' ? 'dark' : 'light';
+  const themeColors = Colors[colorScheme];
 
   useEffect(() => {
     if (insights.length > 0) {
-      // Pick a random insight on mount or when insights change
       const randomIndex = Math.floor(Math.random() * insights.length);
       setCurrentInsight(insights[randomIndex]);
     } else {
@@ -24,7 +29,6 @@ export function ElexirCoachCard({ insights }: ElexirCoachCardProps) {
   const handleNextInsight = () => {
     if (insights.length <= 1) return;
     
-    // Pick next insight that is different from current
     let nextIndex = Math.floor(Math.random() * insights.length);
     while (insights[nextIndex].id === currentInsight.id) {
       nextIndex = Math.floor(Math.random() * insights.length);
@@ -33,24 +37,36 @@ export function ElexirCoachCard({ insights }: ElexirCoachCardProps) {
   };
 
   return (
-    <Pressable style={styles.card} onPress={handleNextInsight}>
+    <Pressable 
+      style={[
+        styles.card, 
+        { 
+          backgroundColor: themeColors.backgroundSelected,
+          borderColor: themeColors.border
+        }
+      ]} 
+      onPress={handleNextInsight}
+    >
       <View style={styles.header}>
-        <Text style={styles.coachLabel}>Elexir Coach</Text>
-        <Text style={styles.rotateIcon}>↻</Text>
+        <View style={styles.header}>
+          <Ionicons name="sparkles" size={14} color={themeColors.text} style={{ marginRight: 6 }} />
+          <Text style={[styles.coachLabel, { color: themeColors.text }]}>Elexir AI Coach</Text>
+        </View>
+        <Ionicons name="refresh-outline" size={14} color={themeColors.textSecondary} />
       </View>
-      <Text style={styles.title}>{currentInsight.title}</Text>
-      <Text style={styles.message}>{currentInsight.message}</Text>
+      <Text style={[styles.title, { color: themeColors.text }]}>{currentInsight.title}</Text>
+      <Text style={[styles.message, { color: themeColors.textSecondary }]}>{currentInsight.message}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#F2F2F7", // Slightly distinct from pure white to stand out
-    borderRadius: 20,
+    borderRadius: BorderRadii.xl,
     padding: 20,
     marginTop: 16,
     marginBottom: 8,
+    borderWidth: 1,
   },
   header: {
     flexDirection: "row",
@@ -58,26 +74,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  coachLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#636366",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  rotateIcon: {
-    fontSize: 16,
-    color: "#8E8E93",
+  coachLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
-    color: "#1C1C1E",
     marginBottom: 6,
+    letterSpacing: -0.2,
   },
   message: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#3F3F46",
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
