@@ -9,20 +9,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Keyboard,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "../lib/auth-context";
 import { AssistantMessage, generateAssistantResponse, AssistantContextType } from "../lib/assistant";
 import { PageContainer } from "../src/components/ui/PageContainer";
-import { SoftCard } from "../src/components/ui/SoftCard";
-import { Colors, BorderRadii, Spacing, Shadows, Typography } from "../src/constants/theme";
+import { Colors, BorderRadii, Spacing, Shadows, getContentContainerStyle } from "../src/constants/theme";
 import { useColorScheme } from "../src/hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AssistantScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   
   const type = (params.type as AssistantContextType) || 'general';
   const productId = params.productId as string | undefined;
@@ -31,7 +33,7 @@ export default function AssistantScreen() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi. I'm your Clinical Assistant.\nI can explain recommendations, break down your scores, and analyze your stack coverage. How can I help you today?"
+      content: "Ask about your supplements, Daily Plan, scores, recommendations or stack coverage."
     }
   ]);
   const [input, setInput] = useState("");
@@ -44,6 +46,17 @@ export default function AssistantScreen() {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener("keyboardDidShow", () => {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    });
+    return () => {
+      showSubscription.remove();
+    };
+  }, []);
 
   const handleSend = async (text: string) => {
     if (!text.trim() || !session?.user.id) return;
@@ -84,9 +97,10 @@ export default function AssistantScreen() {
 
   const SUGGESTED_CHIPS = [
     "Why was this recommended?",
-    "Why is my score 87?",
-    "Ingredient breakdown",
-    "Missing areas in my stack?",
+    "How can I improve my Plan Score?",
+    "Review my stack",
+    "Explain this ingredient",
+    "What should I take today?",
   ];
 
   const scheme = useColorScheme();
@@ -94,7 +108,7 @@ export default function AssistantScreen() {
   const themeColors = Colors[colorScheme];
 
   return (
-    <PageContainer scrollable={false}>
+    <PageContainer scrollable={false} contentContainerStyle={getContentContainerStyle(false)}>
       {/* Premium Minimal Header */}
       <View style={styles.header}>
         <Pressable 
@@ -104,8 +118,8 @@ export default function AssistantScreen() {
           <Ionicons name="chevron-down" size={20} color={themeColors.text} />
         </Pressable>
         <View style={styles.headerTitleContainer}>
-          <Ionicons name="sparkles" size={14} color={themeColors.text} />
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Intelligence Layer</Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Basis Assistant</Text>
+          <Text style={[styles.headerSubtitle, { color: themeColors.textSecondary }]}>Your supplement and health guide</Text>
         </View>
         <View style={styles.placeholder} />
       </View>
@@ -113,6 +127,7 @@ export default function AssistantScreen() {
       <KeyboardAvoidingView 
         style={styles.keyboardView} 
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <ScrollView 
           ref={scrollViewRef}
@@ -126,50 +141,77 @@ export default function AssistantScreen() {
             if (msg.role === 'user') {
               return (
                 <View key={msg.id} style={styles.userQueryContainer}>
-                  <Text style={[styles.userQueryText, { color: themeColors.text }]}>
-                    {msg.content}
-                  </Text>
+                  <View style={[styles.userBubble, { backgroundColor: themeColors.backgroundSelected }]}>
+                    <Text style={[styles.userMessageText, { color: themeColors.text }]}>
+                      {msg.content}
+                    </Text>
+                  </View>
                 </View>
               );
             }
 
             if (isFirst) {
               return (
-                <View key={msg.id} style={styles.heroContainer}>
-                  <View style={[styles.heroIconCircle, { backgroundColor: themeColors.backgroundSelected }]}>
-                    <Ionicons name="sparkles" size={32} color={themeColors.text} />
+                <View 
+                  key={msg.id} 
+                  style={[
+                    styles.introCard, 
+                    { 
+                      backgroundColor: themeColors.backgroundSecondary, 
+                      borderColor: themeColors.borderMuted,
+                      ...Shadows.low 
+                    }
+                  ]}
+                >
+                  <View style={styles.introHeader}>
+                    <View style={[styles.introIconCircle, { backgroundColor: themeColors.backgroundSelected }]}>
+                      <Ionicons name="sparkles" size={16} color={themeColors.text} />
+                    </View>
+                    <Text style={[styles.introTitle, { color: themeColors.text }]}>Basis Assistant</Text>
                   </View>
-                  <Text style={[styles.heroText, { color: themeColors.text }]}>{msg.content}</Text>
+                  <Text style={[styles.introBody, { color: themeColors.textSecondary }]}>
+                    {msg.content}
+                  </Text>
                 </View>
               );
             }
 
             return (
-              <SoftCard key={msg.id} style={[styles.aiResponseCard, { backgroundColor: themeColors.background }]}>
+              <View 
+                key={msg.id} 
+                style={[
+                  styles.aiResponseCard, 
+                  { 
+                    backgroundColor: themeColors.backgroundSecondary, 
+                    borderColor: themeColors.borderMuted,
+                    ...Shadows.low 
+                  }
+                ]}
+              >
                 <View style={styles.aiHeader}>
-                  <Ionicons name="sparkles" size={14} color={themeColors.text} />
-                  <Text style={[styles.aiTitle, { color: themeColors.text }]}>Elexir AI</Text>
+                  <Ionicons name="sparkles" size={14} color={themeColors.textSecondary} />
+                  <Text style={[styles.aiTitle, { color: themeColors.textSecondary }]}>Basis Assistant</Text>
                 </View>
                 <Text style={[styles.aiResponseText, { color: themeColors.text }]}>
                   {msg.content}
                 </Text>
-              </SoftCard>
+              </View>
             );
           })}
           
           {loading && (
             <View style={styles.loadingContainer}>
               <View style={styles.aiHeader}>
-                <Ionicons name="sparkles" size={14} color={themeColors.text} />
-                <Text style={[styles.aiTitle, { color: themeColors.text }]}>Thinking</Text>
+                <Ionicons name="sparkles" size={14} color={themeColors.textSecondary} />
+                <Text style={[styles.aiTitle, { color: themeColors.textSecondary }]}>Thinking</Text>
               </View>
-              <ActivityIndicator size="small" color={themeColors.text} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+              <ActivityIndicator size="small" color={themeColors.textSecondary} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
             </View>
           )}
         </ScrollView>
 
         {/* Floating Input Area */}
-        <View style={styles.bottomArea}>
+        <View style={[styles.bottomArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false} 
@@ -182,8 +224,8 @@ export default function AssistantScreen() {
                 style={[
                   styles.chip, 
                   { 
-                    backgroundColor: themeColors.background,
-                    borderColor: themeColors.borderMuted,
+                    backgroundColor: themeColors.backgroundSecondary,
+                    borderColor: themeColors.border,
                     ...Shadows.low
                   }
                 ]}
@@ -199,8 +241,8 @@ export default function AssistantScreen() {
             <View style={[
               styles.inputPill, 
               { 
-                backgroundColor: themeColors.background, 
-                borderColor: themeColors.borderMuted,
+                backgroundColor: themeColors.backgroundSecondary, 
+                borderColor: themeColors.border,
                 shadowColor: '#000',
               }
             ]}>
@@ -213,6 +255,11 @@ export default function AssistantScreen() {
                 onSubmitEditing={() => handleSend(input)}
                 returnKeyType="send"
                 editable={!loading}
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 150);
+                }}
               />
               <Pressable 
                 style={[
@@ -223,7 +270,7 @@ export default function AssistantScreen() {
                 onPress={() => handleSend(input)}
                 disabled={!input.trim() || loading}
               >
-                <Ionicons name="arrow-up" size={18} color={themeColors.background} />
+                <Ionicons name="arrow-up" size={18} color={themeColors.backgroundSecondary} />
               </Pressable>
             </View>
           </View>
@@ -238,8 +285,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   iconButton: {
     width: 40,
@@ -249,99 +296,112 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitleContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   headerTitle: { 
-    fontSize: 14, 
+    fontSize: 16, 
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: -0.2,
+  },
+  headerSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 1,
   },
   placeholder: { width: 40, height: 40 },
   keyboardView: { flex: 1 },
   chatArea: { flex: 1 },
-  chatContent: { paddingHorizontal: 24, paddingBottom: 40, paddingTop: 20 },
+  chatContent: { paddingBottom: 40, paddingTop: 20 },
   
-  heroContainer: {
-    alignItems: "center",
-    paddingVertical: 60,
-    marginBottom: 20,
-  },
-  heroIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
+  introCard: {
+    padding: 20,
+    borderRadius: BorderRadii.xl,
+    borderWidth: 1,
     marginBottom: 24,
   },
-  heroText: {
-    fontSize: 24,
-    fontWeight: "500",
-    lineHeight: 34,
-    textAlign: "center",
-    letterSpacing: -0.3,
+  introHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  introIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  introTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  introBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '400',
   },
 
   userQueryContainer: {
     alignSelf: "flex-end",
-    marginBottom: 32,
-    marginTop: 16,
-    maxWidth: "90%",
+    marginBottom: 24,
+    marginTop: 8,
+    maxWidth: "85%",
   },
-  userQueryText: {
-    fontSize: 22,
-    fontWeight: "600",
-    lineHeight: 30,
-    letterSpacing: -0.4,
-    textAlign: "right",
+  userBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: BorderRadii.xl,
+    borderBottomRightRadius: BorderRadii.sm,
+  },
+  userMessageText: {
+    fontSize: 17,
+    lineHeight: 26,
+    fontWeight: "400",
   },
 
   aiResponseCard: {
-    marginBottom: 32,
-    padding: 24,
+    marginBottom: 24,
+    padding: 20,
     borderRadius: BorderRadii.xl,
-    borderWidth: 0,
-    ...Shadows.premium,
+    borderWidth: 1,
   },
   aiHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   aiTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   aiResponseText: {
-    fontSize: 16,
+    fontSize: 17,
     lineHeight: 26,
     fontWeight: "400",
   },
 
   loadingContainer: {
-    padding: 24,
-    marginBottom: 32,
+    padding: 20,
+    marginBottom: 24,
   },
 
   bottomArea: {
-    paddingBottom: Platform.OS === 'ios' ? 32 : 24,
+    paddingTop: 12,
   },
   chipsScroll: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   chipsContent: {
-    paddingHorizontal: 24,
-    gap: 10,
+    gap: 8,
+    paddingRight: 16,
   },
   chip: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 100,
     borderWidth: 1,
   },
@@ -350,7 +410,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   inputPillContainer: {
-    paddingHorizontal: 24,
   },
   inputPill: {
     flexDirection: "row",
@@ -367,8 +426,8 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 17,
+    fontWeight: "400",
   },
   sendBtn: {
     width: 40,

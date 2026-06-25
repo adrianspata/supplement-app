@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { getUserStack } from "./stack";
-import { getProductMatch } from "./matching";
+import { calculateMatch } from "./matching";
 import { calculateElexirScore } from "./scoring";
 
 export type AssistantContextType = 'general' | 'stack' | 'product';
@@ -18,8 +18,8 @@ export interface AssistantMessage {
 }
 
 /**
- * Deterministic Mock AI Engine v1
- * Explains Elexir's internal logic without medical advice.
+ * Basis AI Assistant Engine
+ * Explains product quality scores, recommendations, and stack coverage.
  * Designed to be swappable with a real LLM in the future.
  */
 export async function generateAssistantResponse(query: string, context: AssistantContext): Promise<string> {
@@ -36,7 +36,7 @@ export async function generateAssistantResponse(query: string, context: Assistan
 
   let productDetails: any = null;
   let matchDetails: any = null;
-  let elexirScoreDetails: any = null;
+  let scoreDetails: any = null;
 
   if (context.productId) {
     const { data } = await supabase
@@ -47,12 +47,12 @@ export async function generateAssistantResponse(query: string, context: Assistan
     productDetails = data;
     
     if (productDetails) {
-      matchDetails = getProductMatch(
+      matchDetails = calculateMatch(
         profile?.primary_goals || [],
         profile?.health_concerns || [],
         productDetails.product_goals?.map((g: any) => g.goal) || productDetails.inferred_goals || []
       );
-      elexirScoreDetails = calculateElexirScore(productDetails);
+      scoreDetails = calculateElexirScore(productDetails);
     }
   }
 
@@ -64,69 +64,93 @@ export async function generateAssistantResponse(query: string, context: Assistan
   });
 
   const lowCoverageGoals = Array.from(trackedGoals).filter(g => !stackGoals.has(g));
+  const coveredGoals = Array.from(trackedGoals).filter(g => stackGoals.has(g));
 
-  // 2. Deterministic Matching Logic
+  // 2. Query Routing and Wording Logic
 
-  // A. Product Context Queries
-  if (context.type === 'product' && productDetails) {
-    if (q.includes("why was this recommended") || q.includes("why is this recommended")) {
-      const pGoals = productDetails.product_goals?.map((g:any) => g.goal) || [];
+  // A. Medical Safety Fallback
+  if (q.includes("medical") || q.includes("diagnose") || q.includes("treat") || q.includes("cure") || q.includes("sick") || q.includes("disease") || q.includes("doctor")) {
+    return "I am an educational assistant designed to explain product details and goal alignments. I cannot provide medical advice, diagnosis, or treatment recommendations. Always consult a healthcare professional regarding medical conditions.";
+  }
+
+  // B. Greetings
+  if (q.includes("hi") || q.includes("hello")) {
+    return "Hi! I'm your Basis Assistant. I can help explain your recommendations, review your stack, and make your Daily Plan easier to understand. How can I help you today?";
+  }
+
+  // C. Score Queries (Plan Score vs Product Score)
+  if (q.includes("score")) {
+    // General Plan Score check
+    if (context.type !== 'product' || q.includes("plan") || q.includes("my score") || q.includes("overall")) {
+      return "If you mean your Plan Score, it reflects how complete and aligned your current stack and Daily Plan are. You can improve it by adding timing, completing check-ins, and keeping your stack aligned with your goals.";
+    }
+    
+    // Product-specific quality score check
+    if (context.type === 'product' && productDetails) {
+      if (scoreDetails) {
+        const bd = scoreDetails.breakdown;
+        return `The quality score for ${productDetails.name || 'this product'} is ${scoreDetails.score}/100. Here is the breakdown:\n\n• Transparency: ${bd.transparency}/20\n• Ingredient Quality: ${bd.ingredientQuality}/20\n• Dosage Quality: ${bd.dosageQuality}/20\n• Evidence: ${bd.evidence}/20\n• Cleanliness: ${bd.cleanliness}/20\n\nThis score reflects available product information, transparency, and clinical standards. It does not measure medical effectiveness.`;
+      }
+      return "The product score for this product is not available.";
+    }
+  }
+
+  // D. Recommendation Queries
+  if (q.includes("recommend") || q.includes("why was this recommended") || q.includes("why is this recommended")) {
+    if (context.type === 'product' && productDetails) {
+      const pGoals = productDetails.product_goals?.map((g: any) => g.goal) || [];
       const overlaps = pGoals.filter((g: string) => trackedGoals.has(g));
       const fillsLowCoverage = overlaps.filter((g: string) => lowCoverageGoals.includes(g));
       
       if (fillsLowCoverage.length > 0) {
-        return `This product supports ${fillsLowCoverage[0]}, which is one of your tracked goals. Currently, your daily stack has less support for ${fillsLowCoverage[0]}, making this a highly recommended addition to broaden your coverage.`;
+        return `This product supports ${fillsLowCoverage[0]}, which is one of your tracked goals. Currently, your daily stack has less support for ${fillsLowCoverage[0]}, so you might consider adding this to broaden your stack coverage.`;
       } else if (overlaps.length > 0) {
-        return `This product supports ${overlaps.join(" and ")}, aligning closely with your tracked health goals.`;
+        return `This product supports ${overlaps.join(" and ")}, which aligns with your tracked health goals and may support your overall routine.`;
       } else if (productDetails.source === 'elexir_curated') {
-        return `While this product does not directly match your primary goals, it is a high-quality, curated product in our library known for its transparent sourcing and clear ingredient profile.`;
+        return "While this product does not directly match your primary goals, it is a curated product in our library selected for its transparent sourcing and clear ingredient profile.";
       }
-      return `This product was evaluated by Elexir's algorithms but doesn't appear to strongly overlap with your explicitly tracked goals or diet preferences.`;
+      return "This product doesn't appear to strongly overlap with your explicitly tracked goals or diet preferences, but it is available in our catalog for tracking.";
     }
-
-    if (q.includes("score")) {
-      if (elexirScoreDetails) {
-        const bd = elexirScoreDetails.breakdown;
-        return `The Elexir Score for ${productDetails.name || 'this product'} is ${elexirScoreDetails.score}/100. Here is the breakdown:\n\n• Transparency: ${bd.transparency}/25\n• Ingredients: ${bd.ingredients}/30\n• Quality: ${bd.quality}/20\n• Goal Relevance: ${bd.goalRelevance}/25\n\nThis score reflects available product information, transparency, and goal relevance. It does not measure medical effectiveness.`;
-      }
-      return `The Elexir Score for this product is not available.`;
-    }
-
-    if (q.includes("ingredient") || q.includes("what is in this")) {
-      const ingredients = productDetails.product_ingredients?.map((i:any) => i.ingredient?.name).filter(Boolean);
-      if (ingredients && ingredients.length > 0) {
-        return `Based on Elexir's data, the primary active ingredients in this product include ${ingredients.slice(0, 3).join(", ")}. These are naturally extracted from the product label for tracking purposes.`;
-      }
-      return `I don't have detailed active ingredient metadata for this product yet. We rely on clear labeling and third-party data to parse ingredients.`;
-    }
+    return "Recommendations are based on your goals, saved products, current stack and logged signals where available.";
   }
 
-  // B. Stack Context Queries
-  if (context.type === 'stack' || q.includes("stack") || q.includes("coverage")) {
-    if (q.includes("low coverage") || q.includes("missing")) {
+  // E. Stack / Coverage Queries
+  if (context.type === 'stack' || q.includes("stack") || q.includes("coverage") || q.includes("review")) {
+    if (q.includes("low coverage") || q.includes("missing") || q.includes("gap")) {
       if (lowCoverageGoals.length > 0) {
-        return `Your current stack has less coverage for: ${lowCoverageGoals.join(", ")}. This means none of the supplements currently scheduled in your routine list these as primary supported goals. You can explore the Cabinet to find recommendations that fill these gaps.`;
+        return `Based on your current stack, there is less coverage for: ${lowCoverageGoals.join(", ")}. This means none of your scheduled items directly support these goals. You might consider reviewing recommended products in the Cabinet to support these goals.`;
       }
       return `Your stack looks incredibly well-rounded! All of your tracked goals (${Array.from(trackedGoals).join(", ")}) are currently supported by at least one product in your routine.`;
     }
 
-    if (q.includes("support") || q.includes("what does my stack do")) {
-      const covered = Array.from(trackedGoals).filter(g => stackGoals.has(g));
-      if (covered.length > 0) {
-        return `Based on the products you've added, your stack is actively supporting: ${covered.join(", ")}.`;
+    if (q.includes("support") || q.includes("what does my stack do") || q.includes("review my stack") || q.includes("review stack")) {
+      let msg = "I can help review what is currently in your stack and highlight missing timing, possible gaps or products that need review.";
+      if (coveredGoals.length > 0) {
+        msg += ` Based on your active stack, you are supporting: ${coveredGoals.join(", ")}.`;
+      } else {
+        msg += " Currently, your stack does not seem to heavily overlap with your goals yet. You can update your goals in your Profile or add products to your Daily Plan.";
       }
-      return `Your stack doesn't seem to heavily overlap with your explicitly tracked goals yet. You can update your goals in your Profile or add targeted products from the Cabinet.`;
+      return msg;
     }
   }
 
-  // C. Fallbacks
-  if (q.includes("hi") || q.includes("hello")) {
-    return "Hi! I'm Elexir's AI Assistant. I can explain why products are recommended, break down your Elexir Scores, and analyze your stack coverage. How can I help you today?";
+  // F. Ingredient Queries
+  if (q.includes("ingredient") || q.includes("what is in this") || q.includes("explain this ingredient")) {
+    if (context.type === 'product' && productDetails) {
+      const ingredients = productDetails.product_ingredients?.map((i: any) => i.ingredient?.name).filter(Boolean);
+      if (ingredients && ingredients.length > 0) {
+        return `Based on available label data, the primary active ingredients in this product include ${ingredients.slice(0, 3).join(", ")}. These ingredients may support your health goals if they align with your tracked focuses.`;
+      }
+      return "I don't have detailed active ingredient metadata for this product yet. We rely on clear labeling and verified product specifications to compile ingredients.";
+    }
+    return "I can help explain supplement ingredients, check active dosages, and verify quality. Ask about ingredients from any specific product screen.";
   }
 
-  if (q.includes("medical") || q.includes("diagnose") || q.includes("treat") || q.includes("cure") || q.includes("sick")) {
-    return "I am an educational assistant designed to explain Elexir's internal logic and product metadata. I cannot provide medical advice, diagnosis, or treatment recommendations. Always consult a healthcare professional regarding medical conditions.";
+  // G. Daily Plan Queries
+  if (q.includes("plan") || q.includes("daily plan") || q.includes("routine")) {
+    return "Your Daily Plan helps you stay consistent with your routine. It tracks your supplement timing, check-ins, and adherence. Consider adding timing to your active stack items and completing daily check-ins to optimize your Plan Score.";
   }
 
-  return "I'm currently a V1 deterministic assistant and don't understand that specific question yet. Try asking me about 'recommendations', 'Elexir score', 'ingredients', or your 'stack coverage'.";
+  // Fallback Response
+  return "I’m not sure how to answer that yet, but I can help with recommendations, product scores, ingredients, your stack, or your Daily Plan.";
 }
