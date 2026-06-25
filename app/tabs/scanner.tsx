@@ -1,5 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useState, useRef, useEffect } from "react";
+import { router } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, View, Animated, Easing, Platform, UIManager, Linking } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -53,7 +54,7 @@ export default function Scanner() {
     if (permission.status === 'denied' && !permission.canAskAgain) {
       Alert.alert(
         "Permission Required",
-        "Elexir requires camera access to scan physical supplement packaging and labels. Please enable it in your device settings.",
+        "Basis requires camera access to scan physical supplement packaging and labels. Please enable it in your device settings.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Open Settings", onPress: () => Linking.openSettings() }
@@ -75,7 +76,7 @@ export default function Scanner() {
             Hardware Access
           </Text>
           <Text style={[styles.permissionSubtitle, { color: themeColors.textSecondary }]}>
-            Elexir requires camera access to scan physical supplement packaging and labels.
+            Basis requires camera access to scan physical supplement packaging and labels.
           </Text>
           <Pressable
             style={[styles.allowBtnCard, { backgroundColor: themeColors.text }]}
@@ -177,7 +178,7 @@ export default function Scanner() {
           </Text>
           <Text style={styles.guidanceSubtitle}>
             {scanned 
-              ? "Fetching formulation and syncing with your Elexir profile..."
+              ? "Fetching formulation and syncing with your Basis profile..."
               : "Point the camera at a supplement barcode\nto analyze its contents."
             }
           </Text>
@@ -198,7 +199,7 @@ export default function Scanner() {
 
       <View style={[styles.topHeader, { top: insets.top + Spacing.sm }]}>
         <View style={styles.topHeaderRow}>
-          <Pressable style={styles.iconBtn}>
+          <Pressable style={styles.iconBtn} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </Pressable>
           
