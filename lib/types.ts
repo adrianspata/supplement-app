@@ -5,6 +5,7 @@ export type Profile = {
   email: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  onboarding_completed?: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -34,7 +35,7 @@ export type ReminderTime = 'morning' | 'afternoon' | 'evening' | 'multiple';
 
 export type HealthKnowledgeLevel = 'beginner' | 'intermediate' | 'advanced';
 
-export type HealthSelfAssessment = 1 | 2 | 3 | 4;
+export type HealthSelfAssessment = number;
 
 export type UserPreferences = {
   id: string;
@@ -43,22 +44,33 @@ export type UserPreferences = {
   primary_goals: PrimaryGoal[] | null;
   /** @deprecated use primary_goals instead */
   primary_goal: PrimaryGoal | null;
-  // Self-assessment: Excellent=4, Good=3, Average=2, Poor=1
   health_score_self_assessment: HealthSelfAssessment | null;
   // Biological info
   age: number | null;
+  age_range: string | null;
   sex: Sex | null;
   height_cm: number | null;
   weight_kg: number | null;
   // Diet
   diet_type: DietType | null;
   // Supplements & health
+  current_supplements: string[] | null;
+  /** @deprecated use current_supplements instead */
   existing_supplements: string[] | null;
   health_concerns: string[] | null;
   allergies: string[] | null;
   // Preferences
   reminder_time: ReminderTime | null;
   health_knowledge_level: HealthKnowledgeLevel | null;
+  
+  // New onboarding survey fields
+  exercise_frequency: string | null;
+  sleep_duration: string | null;
+  stress_level: number | null;
+  supplement_knowledge_level: string | null;
+  purchase_drivers: string[] | null;
+  purchase_frequency: string | null;
+
   // Meta
   completed_onboarding: boolean;
   created_at: string;
@@ -138,6 +150,19 @@ export type Product = {
   raw_data: any | null;
   created_at: string;
   
+  // new fields from ingestion schema
+  product_url?: string | null;
+  serving_size?: string | null;
+  servings_per_container?: number | null;
+  ingredients_text?: string | null;
+  vegan?: boolean | null;
+  gluten_free?: boolean | null;
+  dairy_free?: boolean | null;
+  claims?: string[] | null;
+  data_quality_score?: number | null;
+  verified_status?: string | null;
+  supplement_facts?: any | null;
+
   // joined fields
   brands?: Brand | null;
   product_ingredients?: ProductIngredient[];
@@ -172,10 +197,30 @@ export type UserStackItem = {
   user_id: string;
   product_id: string;
   timing: StackTiming;
+  dosage: string | null;
+  frequency: string | null;
   notes: string | null;
   created_at: string;
   // joined fields when querying
   product?: Product;
+};
+
+export type DailyProtocolLog = {
+  id: string;
+  user_id: string;
+  stack_item_id: string;
+  product_id: string;
+  taken_at: string | null;
+  scheduled_for: string;
+  status: 'pending' | 'taken' | 'skipped' | 'missed';
+  notes: string | null;
+  created_at: string;
+};
+
+export type TodayProtocolItem = UserStackItem & {
+  status: 'pending' | 'taken' | 'skipped' | 'missed';
+  taken_at: string | null;
+  log_id?: string;
 };
 
 export type ExternalProduct = {
