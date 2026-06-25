@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -11,7 +10,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../lib/auth-context";
@@ -19,12 +22,14 @@ import { calculateMatch, generateWhyItMatches } from "../../lib/matching";
 import { formatBrandName, formatCategory, formatGoalLabel, formatIngredientName, formatProductName, formatQualityAttribute, getProductImageFallback, shouldDisplayField } from "../../lib/productDisplay";
 import { getProductById, getSavedProducts, getSimilarProducts, markProductAsViewed, saveProduct, unsaveProduct } from "../../lib/products";
 import { calculateElexirScore } from "../../lib/scoring";
-import { addToStack, getUserStack } from "../../lib/stack";
+import { addProductToStack, getUserStack } from "../../lib/stack";
 import { supabase } from "../../lib/supabase";
 import { Product, StackTiming, UserSavedProduct } from "../../lib/types";
 import { ProductCompareRow } from "../../src/components/ProductCompareRow";
 import { PremiumButton } from "../../src/components/ui/PremiumButton";
 import { SurfaceCard } from "../../src/components/ui/SurfaceCard";
+import { ScoreBreakdownCard } from "../../src/components/ScoreBreakdownCard";
+import { ProductProsConsCard } from "../../src/components/ProductProsConsCard";
 import { BlurLevels, BorderRadii, Colors, Shadows, Spacing } from "../../src/constants/theme";
 import { useColorScheme } from "../../src/hooks/use-color-scheme";
 
@@ -43,6 +48,11 @@ export default function ProductDetailScreen() {
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [inStack, setInStack] = useState(false);
+  const [stackModalVisible, setStackModalVisible] = useState(false);
+  const [stackTiming, setStackTiming] = useState<StackTiming>('morning');
+  const [stackDosage, setStackDosage] = useState("");
+  const [stackFrequency, setStackFrequency] = useState("Daily");
+  const [isSavingStack, setIsSavingStack] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
@@ -106,15 +116,24 @@ export default function ProductDetailScreen() {
     }
   };
 
-  const handleAddToStack = async (timing: StackTiming) => {
+  const handleSaveStack = async () => {
     if (!userId || !product) return;
+    setIsSavingStack(true);
     try {
-      await addToStack(userId, product.id, timing);
+      await addProductToStack(userId, product.id, stackTiming, stackDosage || null, stackFrequency || 'Daily', null);
       setInStack(true);
-      Alert.alert("Added to Stack", `This product has been added to your ${timing.replace("_", " ")} routine.`);
-    } catch (error) {
-      console.error("Error adding to stack:", error);
-      Alert.alert("Error", "Could not add to stack.");
+      setStackModalVisible(false);
+      Alert.alert("Added to Stack", `This product has been added to your ${stackTiming.replace("_", " ")} routine.`);
+    } catch (error: any) {
+      if (error?.code === '23505' || error?.message?.includes('unique constraint') || error?.message?.includes('duplicate key')) {
+        Alert.alert("Already in Stack", `This product is already in your ${stackTiming.replace("_", " ")} routine.`);
+        setStackModalVisible(false);
+      } else {
+        console.error("Error adding to stack:", error);
+        Alert.alert("Error", "Could not add to stack.");
+      }
+    } finally {
+      setIsSavingStack(false);
     }
   };
 
@@ -123,18 +142,10 @@ export default function ProductDetailScreen() {
       Alert.alert("Please sign in", "You must be signed in to build a stack.");
       return;
     }
-    const pref = userPreferences?.reminder_time;
-    Alert.alert(
-      "Add to Stack",
-      "When do you take this supplement?",
-      [
-        { text: `Morning${pref === 'morning' ? ' (Preferred)' : ''}`, onPress: () => handleAddToStack("morning") },
-        { text: `Afternoon${pref === 'afternoon' ? ' (Preferred)' : ''}`, onPress: () => handleAddToStack("afternoon") },
-        { text: `Evening${pref === 'evening' ? ' (Preferred)' : ''}`, onPress: () => handleAddToStack("evening") },
-        { text: "As needed", onPress: () => handleAddToStack("as_needed") },
-        { text: "Cancel", style: "cancel" }
-      ]
-    );
+    if (userPreferences?.reminder_time && ['morning', 'afternoon', 'evening'].includes(userPreferences.reminder_time)) {
+      setStackTiming(userPreferences.reminder_time as StackTiming);
+    }
+    setStackModalVisible(true);
   };
 
   if (loading) {
@@ -154,9 +165,35 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const ingredients = product.product_ingredients || [];
+  let ingredients = product.product_ingredients || [];
+  
+  if (ingredients.length === 0 && (product.raw_data?.supplement_facts?.active_ingredients || product.supplement_facts?.active_ingredients)) {
+    const rawIngs = product.raw_data?.supplement_facts?.active_ingredients || product.supplement_facts?.active_ingredients;
+    if (Array.isArray(rawIngs)) {
+      ingredients = rawIngs.map((ing: any, idx: number) => ({
+        id: `raw-${idx}`,
+        product_id: product.id,
+        ingredient_id: `raw-ing-${idx}`,
+        amount: ing.amount,
+        unit: ing.unit || "",
+        form: ing.form || null,
+        created_at: new Date().toISOString(),
+        ingredient: {
+          id: `raw-ing-${idx}`,
+          name: ing.name,
+          created_at: new Date().toISOString(),
+        }
+      })) as any[];
+    }
+  }
+
   const productGoals = product.product_goals?.length ? product.product_goals.map(g => g.goal) : (product.inferred_goals || []);
   const attributes = product.product_quality_attributes?.map(a => a.attribute) || [];
+
+  const addAttr = (attr: string) => { if (!attributes.includes(attr)) attributes.push(attr); };
+  if (product.vegan) addAttr("vegan");
+  if (product.gluten_free) addAttr("gluten_free");
+  if (product.dairy_free) addAttr("dairy_free");
 
   const match = calculateMatch(userPreferences?.primary_goals, userPreferences?.health_concerns, productGoals);
   const elexir = calculateElexirScore(product);
@@ -250,7 +287,7 @@ export default function ProductDetailScreen() {
 
           <View style={styles.titleSection}>
             <Text style={[styles.brandName, { color: themeColors.textSecondary }]}>
-              {formatBrandName(product.brands?.name || product.brand) || "Elexir Curated"}
+              {formatBrandName(product.brands?.name || product.brand) || "Basis Curated"}
             </Text>
             <Text style={[styles.productName, { color: themeColors.text }]}>
               {formatProductName(product.name)}
@@ -263,61 +300,7 @@ export default function ProductDetailScreen() {
           </View>
         </LinearGradient>
 
-        {/* Elexir Score Diagnostic Report - Clean Supporting Surface */}
-        <View style={styles.section}>
-          <View style={styles.scoreHeader}>
-            <View>
-              <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary }]}>DIAGNOSTIC SIGNAL</Text>
-              <Text style={[styles.scoreSubtitle, { color: themeColors.textMuted }]}>Clinical quality index</Text>
-            </View>
-            <Text style={[styles.scoreValue, { color: themeColors.text }]}>
-              {elexir.score}
-            </Text>
-          </View>
 
-          <View style={styles.scoreBreakdown}>
-            <View style={styles.breakdownRow}>
-              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Transparency</Text>
-              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.transparency}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Ingredients</Text>
-              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.ingredients}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Quality</Text>
-              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.quality}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={[styles.breakdownLabel, { color: themeColors.textSecondary }]}>Goal Relevance</Text>
-              <Text style={[styles.breakdownValue, { color: themeColors.text }]}>{elexir.breakdown.goalRelevance}</Text>
-            </View>
-          </View>
-
-          {elexir.pros.length > 0 && (
-            <View style={[styles.scoreList, { marginTop: 32 }]}>
-              <Text style={[styles.thingsToKnowTitle, { color: themeColors.textSecondary }]}>CLINICAL STRENGTHS</Text>
-              {elexir.pros.map((pro, idx) => (
-                <View key={`pro-${idx}`} style={styles.bulletRow}>
-                  <Ionicons name="checkmark" size={18} color={themeColors.success} style={{ marginRight: 12, marginTop: 2 }} />
-                  <Text style={[styles.scoreItem, { color: themeColors.text }]}>{pro}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {elexir.thingsToKnow.length > 0 && (
-            <View style={[styles.scoreList, { marginTop: 24 }]}>
-              <Text style={[styles.thingsToKnowTitle, { color: themeColors.textSecondary }]}>CONSIDERATIONS</Text>
-              {elexir.thingsToKnow.map((ttk, idx) => (
-                <View key={`ttk-${idx}`} style={styles.bulletRow}>
-                  <Ionicons name="remove" size={18} color={themeColors.textMuted} style={{ marginRight: 12, marginTop: 2 }} />
-                  <Text style={[styles.scoreItemNeutral, { color: themeColors.textSecondary }]}>{ttk}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
 
         {/* Why It Matches You */}
         {match.score > 0 && (
@@ -349,10 +332,14 @@ export default function ProductDetailScreen() {
         {/* Summary & Intro Text */}
         <View style={styles.section}>
           <Text style={[styles.bodyTextLarge, { color: themeColors.textSecondary }]}>
-            {product.source === "elexir_curated" && product.raw_data?.description
-              ? product.raw_data.description
-              : introText}
+            {product.raw_data?.short_summary || introText}
           </Text>
+        </View>
+
+        {/* Clinical Quality Index (CQI) */}
+        <View style={styles.section}>
+          <ScoreBreakdownCard scoreResult={elexir} />
+          <ProductProsConsCard pros={elexir.pros} cons={elexir.thingsToKnow} />
         </View>
 
         {/* What's Inside - Ingredients Table */}
@@ -429,7 +416,7 @@ export default function ProductDetailScreen() {
 
         {/* How To Use */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 16 }]}>SUGGESTED PROTOCOL</Text>
+          <Text style={[styles.sectionTitlePrimary, { color: themeColors.textSecondary, marginBottom: 16 }]}>SUGGESTED PLAN</Text>
           <Text style={[styles.bodyText, { color: themeColors.textSecondary }]}>
             {product.source === "elexir_curated" && product.raw_data?.suggested_use
               ? product.raw_data.suggested_use
@@ -489,18 +476,101 @@ export default function ProductDetailScreen() {
               onPress={inStack ? undefined : promptStack}
             >
               <Text style={[styles.premiumPrimaryBtnText, { color: themeColors.background }]}>
-                {inStack ? "Active in Stack" : "Add to Protocol"}
+                {inStack ? "Active in Stack" : "Add to Plan"}
               </Text>
             </Pressable>
           </View>
         </View>
       </View>
+
+      <Modal
+        visible={stackModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setStackModalVisible(false)}
+      >
+        <View style={[styles.modalSafeArea, { backgroundColor: themeColors.background, flex: 1 }]}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.borderMuted }]}>
+              <Pressable onPress={() => setStackModalVisible(false)} style={styles.modalCancelBtn}>
+                <Text style={[styles.modalCancelText, { color: themeColors.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Text style={[styles.modalTitle, { color: themeColors.text }]}>Add to Plan</Text>
+              <Pressable onPress={handleSaveStack} disabled={isSavingStack} style={styles.modalSaveBtn}>
+                {isSavingStack ? (
+                  <ActivityIndicator color={themeColors.text} size="small" />
+                ) : (
+                  <Text style={[styles.modalSaveText, { color: themeColors.text, fontWeight: "700" }]}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+            
+            <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
+              <View style={styles.formGroup}>
+                <Text style={[styles.formLabel, { color: themeColors.textMuted }]}>Timing *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  <View style={styles.quickChips}>
+                    {(['morning', 'afternoon', 'evening', 'as_needed'] as StackTiming[]).map(t => (
+                      <Pressable 
+                        key={t} 
+                        style={[
+                          styles.quickChip, 
+                          { backgroundColor: themeColors.backgroundSecondary, borderColor: themeColors.border },
+                          stackTiming === t && { backgroundColor: themeColors.text, borderColor: themeColors.text }
+                        ]}
+                        onPress={() => setStackTiming(t)}
+                      >
+                        <Text 
+                          style={[
+                            styles.quickChipText, 
+                            { color: themeColors.textSecondary },
+                            stackTiming === t && { color: themeColors.background }
+                          ]}
+                        >
+                          {t.replace('_', ' ')}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.formLabel, { color: themeColors.textMuted }]}>Dosage (Optional)</Text>
+                <TextInput 
+                  style={[styles.formInput, { backgroundColor: themeColors.backgroundSecondary, color: themeColors.text, borderColor: themeColors.border }]}
+                  placeholder="e.g. 2 capsules"
+                  placeholderTextColor={themeColors.textMuted}
+                  value={stackDosage}
+                  onChangeText={setStackDosage}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.formLabel, { color: themeColors.textMuted }]}>Frequency (Optional)</Text>
+                <TextInput 
+                  style={[styles.formInput, { backgroundColor: themeColors.backgroundSecondary, color: themeColors.text, borderColor: themeColors.border }]}
+                  placeholder="e.g. Daily, Weekly"
+                  placeholderTextColor={themeColors.textMuted}
+                  value={stackFrequency}
+                  onChangeText={setStackFrequency}
+                />
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 640,
+    alignSelf: "center",
+  },
   centerContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
   errorText: { fontSize: 18, marginBottom: 16 },
 
@@ -697,4 +767,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  modalSafeArea: { paddingBottom: 24 },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  modalCancelBtn: { width: 60 },
+  modalCancelText: { fontSize: 16 },
+  modalTitle: { fontSize: 17, fontWeight: "700" },
+  modalSaveBtn: { width: 60, alignItems: "flex-end" },
+  modalSaveText: { fontSize: 16 },
+  modalScroll: { padding: 24, paddingBottom: 100 },
+  formGroup: { marginBottom: 24 },
+  formLabel: { fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
+  formInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadii.md,
+    padding: 16,
+    fontSize: 16,
+  },
+  quickChips: { flexDirection: "row", gap: 8 },
+  quickChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+    borderWidth: 1,
+  },
+  quickChipText: { fontSize: 14, fontWeight: "600", textTransform: "capitalize" },
 });

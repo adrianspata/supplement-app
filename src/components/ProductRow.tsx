@@ -81,6 +81,22 @@ export function ProductRow({
         ) : null}
 
         <View style={styles.badges}>
+          {(product.source === "curated" || product.source === "elexir_curated") && (
+            <View style={[styles.goalChip, { backgroundColor: themeColors.backgroundSelected, borderColor: themeColors.border, borderWidth: 1 }]}>
+              <Text style={[styles.goalText, { color: themeColors.text, fontWeight: '700' }]}>
+                {product.verified_status === "verified" ? "✓ Verified" : "Curated"}
+              </Text>
+            </View>
+          )}
+
+          {typeof product.data_quality_score === "number" && product.data_quality_score > 0 && (
+            <View style={[styles.goalChip, { backgroundColor: themeColors.backgroundSecondary }]}>
+              <Text style={[styles.goalText, { color: themeColors.textSecondary }]}>
+                CQI {product.data_quality_score}
+              </Text>
+            </View>
+          )}
+
           {match && match.score > 0 && (
             <View 
               style={[

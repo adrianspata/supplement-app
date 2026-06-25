@@ -11,20 +11,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  useWindowDimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
-import { searchProducts, saveProduct, getSavedProducts, unsaveProduct, upsertExternalProduct, getRecentlyViewedProducts } from "../lib/products";
+import { searchProducts, upsertExternalProduct, getRecentlyViewedProducts, getSavedProducts } from "../lib/products";
 import { Product, UserSavedProduct, RecentlyViewedProduct } from "../lib/types";
 import { useAuth } from "../lib/auth-context";
-import { calculateMatch } from "../lib/matching";
 import { calculateElexirScore } from "../lib/scoring";
-import { formatCategory, formatProductName, formatBrandName, getProductImageFallback } from "../lib/productDisplay";
-import { ProductRow } from "../src/components/ProductRow";
+import { formatCategory, formatProductName, formatBrandName, formatIngredientName } from "../lib/productDisplay";
 import { PageContainer } from "../src/components/ui/PageContainer";
-import { SoftCard } from "../src/components/ui/SoftCard";
-import { Colors, Spacing, BorderRadii, Shadows, Typography } from "../src/constants/theme";
+import { Colors, BorderRadii, Shadows, Spacing, getContentContainerStyle } from "../src/constants/theme";
 import { useColorScheme } from "../src/hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -32,58 +31,106 @@ const TOP_CATEGORIES = [
   { icon: "moon-outline" as keyof typeof Ionicons.glyphMap, name: "Magnesium" },
   { icon: "sunny-outline" as keyof typeof Ionicons.glyphMap, name: "Vitamin D" },
   { icon: "water-outline" as keyof typeof Ionicons.glyphMap, name: "Omega-3" },
-  { icon: "shield-checkmark-outline" as keyof typeof Ionicons.glyphMap, name: "Zinc" },
+  { icon: "fitness-outline" as keyof typeof Ionicons.glyphMap, name: "Creatine" },
+  { icon: "barbell-outline" as keyof typeof Ionicons.glyphMap, name: "Protein" },
   { icon: "flask-outline" as keyof typeof Ionicons.glyphMap, name: "Probiotics" },
-  { icon: "leaf-outline" as keyof typeof Ionicons.glyphMap, name: "Ashwagandha" },
-  { icon: "sparkles-outline" as keyof typeof Ionicons.glyphMap, name: "Collagen" },
-  { icon: "pulse-outline" as keyof typeof Ionicons.glyphMap, name: "Iron" }
+  { icon: "bed-outline" as keyof typeof Ionicons.glyphMap, name: "Sleep" },
+  { icon: "pulse-outline" as keyof typeof Ionicons.glyphMap, name: "Stress" },
+  { icon: "flash-outline" as keyof typeof Ionicons.glyphMap, name: "Energy" },
+  { icon: "sparkles-outline" as keyof typeof Ionicons.glyphMap, name: "Skin" }
 ];
 
 const RECENT_SEARCHES_KEY = "@recent_searches";
 
-interface CompactRecentlyViewedRowProps {
-  item: RecentlyViewedProduct;
+interface ProductCardProps {
+  product: Product;
   onPress: () => void;
-  themeColors: typeof Colors.light | typeof Colors.dark;
+  themeColors: any;
+  isDark: boolean;
+  cardBg: string;
+  imageBg: string;
+  borderCol: string;
 }
 
-const CompactRecentlyViewedRow = ({ item, onPress, themeColors }: CompactRecentlyViewedRowProps) => {
-  const product = item.product;
-  if (!product) return null;
+const ProductCard = ({ product, onPress, themeColors, isDark, cardBg, imageBg, borderCol }: ProductCardProps) => {
   const elexir = calculateElexirScore(product);
-  
+
+  const hasIngredients = (product.product_ingredients && product.product_ingredients.length > 0) ||
+                         (product.raw_data?.supplement_facts?.active_ingredients || product.supplement_facts?.active_ingredients) ||
+                         (product.ingredients_text && product.ingredients_text.trim() !== "");
+
+  const score = elexir.score;
+  let badgeLabel = "";
+  let badgeBg = "";
+  let badgeText = "";
+
+  if (!hasIngredients) {
+    badgeLabel = "Not scored";
+    badgeBg = isDark ? "rgba(255,255,255,0.06)" : "#F2F2F7";
+    badgeText = themeColors.textSecondary;
+  } else if (score >= 85) {
+    badgeLabel = "Excellent";
+    badgeBg = isDark ? "rgba(74, 222, 128, 0.12)" : "#E8FDF0";
+    badgeText = isDark ? "#4ADE80" : "#15803D";
+  } else if (score >= 60) {
+    badgeLabel = "Good";
+    badgeBg = isDark ? "rgba(96, 165, 250, 0.12)" : "#EFF6FF";
+    badgeText = isDark ? "#60A5FA" : "#1D4ED8";
+  } else {
+    badgeLabel = "Needs review";
+    badgeBg = isDark ? "rgba(245, 158, 11, 0.12)" : "#FFFBEB";
+    badgeText = isDark ? "#F59E0B" : "#B45309";
+  }
+
+  const brand = formatBrandName(product.brands?.name || product.brand) || "Basis";
+  const name = formatProductName(product.name);
+  const category = formatCategory(product.category);
+  const firstIngredient = product.product_ingredients && product.product_ingredients.length > 0
+    ? formatIngredientName(product.product_ingredients[0].ingredient?.name)
+    : null;
+
+  const subLabel = category || firstIngredient;
+
   return (
-    <Pressable 
+    <Pressable
       style={({ pressed }) => [
-        styles.compactRow, 
-        { 
-          backgroundColor: themeColors.background, 
-          borderColor: themeColors.borderMuted,
-          ...Shadows.low
-        }, 
-        pressed && { opacity: 0.85 }
-      ]} 
+        styles.productCard,
+        {
+          backgroundColor: cardBg,
+          borderColor: borderCol,
+        },
+        pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
+      ]}
       onPress={onPress}
     >
-      <View style={[styles.compactImageContainer, { backgroundColor: themeColors.backgroundSecondary }]}>
+      <View style={[styles.productImageContainer, { backgroundColor: imageBg }]}>
         {product.image_url ? (
-          <Image 
-            source={{ uri: product.image_url }} 
-            style={styles.compactImage} 
-          />
+          <Image source={{ uri: product.image_url }} style={styles.productImage} resizeMode="contain" />
         ) : (
-          <Ionicons name={getProductImageFallback(product.category) as keyof typeof Ionicons.glyphMap || "cube-outline"} size={20} color={themeColors.textMuted} />
+          <Ionicons name="flask-outline" size={28} color={themeColors.textMuted} />
         )}
       </View>
-      <View style={styles.compactInfo}>
-        <Text style={[styles.compactName, { color: themeColors.text }]} numberOfLines={1}>{formatProductName(product.name)}</Text>
-        <Text style={[styles.compactBrand, { color: themeColors.textSecondary }]} numberOfLines={1}>
-          {formatBrandName(product.brands?.name || product.brand)}
+
+      <View style={styles.productInfoContainer}>
+        <Text style={[styles.productBrand, { color: themeColors.textSecondary }]} numberOfLines={1}>
+          {brand}
         </Text>
-      </View>
-      <View style={[styles.scoreBadgeMini, { backgroundColor: themeColors.backgroundSecondary }]}>
-        <Ionicons name="sparkles" size={10} color={themeColors.text} style={{ marginRight: 4 }} />
-        <Text style={[styles.scoreBadgeText, { color: themeColors.text }]}>{elexir.score}</Text>
+        
+        <Text style={[styles.productNameText, { color: themeColors.text }]} numberOfLines={2}>
+          {name}
+        </Text>
+
+        <View style={styles.productBadgeRow}>
+          <View style={[styles.qualityBadge, { backgroundColor: badgeBg }]}>
+            <Text style={[styles.qualityBadgeText, { color: badgeText }]}>{badgeLabel}</Text>
+          </View>
+
+          {subLabel ? (
+            <Text style={[styles.productCategoryLabel, { color: themeColors.textMuted }]} numberOfLines={1}>
+              {subLabel}
+            </Text>
+          ) : null}
+        </View>
       </View>
     </Pressable>
   );
@@ -95,27 +142,80 @@ export default function ProductSearchScreen() {
   const colorScheme = scheme === "dark" ? "dark" : "light";
   const themeColors = Colors[colorScheme];
 
-  const { userPreferences } = useAuth();
+  const isDark = colorScheme === "dark";
+  const screenBg = isDark ? themeColors.background : "#F6F6F9";
+  const cardBg = isDark ? themeColors.backgroundSecondary : "#FFFFFF";
+  const imageBg = isDark ? "rgba(255,255,255,0.02)" : "#F9F9F9";
+  const borderCol = isDark ? themeColors.border : "#E5E5EA";
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [savedProducts, setSavedProducts] = useState<UserSavedProduct[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     loadRecentSearches();
+    fetchRecommended();
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error && data?.user) {
         setUserId(data.user.id);
-        fetchSavedProducts(data.user.id);
         fetchRecentlyViewed(data.user.id);
       }
     });
   }, []);
+
+  const fetchRecommended = async () => {
+    try {
+      // Prefer curated stack products
+      const { data: curated, error: curatedErr } = await supabase
+        .from("products")
+        .select(`
+          *,
+          brands(*),
+          product_ingredients(*, ingredients(*)),
+          product_goals(*),
+          product_quality_attributes(*)
+        `)
+        .eq("source", "elexir_curated")
+        .limit(6);
+
+      if (curatedErr) throw curatedErr;
+
+      if (curated && curated.length > 0) {
+        setRecommendedProducts(curated);
+      } else {
+        // Fallback to highest available general stack products
+        const { data: fallback, error: fallbackErr } = await supabase
+          .from("products")
+          .select(`
+            *,
+            brands(*),
+            product_ingredients(*, ingredients(*)),
+            product_goals(*),
+            product_quality_attributes(*)
+          `)
+          .limit(6);
+
+        if (fallbackErr) throw fallbackErr;
+
+        if (fallback) {
+          const sorted = [...fallback].sort((a, b) => {
+            const scoreA = calculateElexirScore(a).score;
+            const scoreB = calculateElexirScore(b).score;
+            return scoreB - scoreA;
+          });
+          setRecommendedProducts(sorted);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load recommended products:", err);
+    }
+  };
 
   const fetchRecentlyViewed = async (uid: string) => {
     try {
@@ -124,11 +224,6 @@ export default function ProductSearchScreen() {
     } catch (error) {
       console.error("Failed to load recently viewed", error);
     }
-  };
-
-  const fetchSavedProducts = async (uid: string) => {
-    const saved = await getSavedProducts(uid);
-    setSavedProducts(saved);
   };
 
   const loadRecentSearches = async () => {
@@ -180,269 +275,315 @@ export default function ProductSearchScreen() {
 
   const handleProductTap = async (product: Product) => {
     try {
-      const productId = await upsertExternalProduct(product);
-      router.push(`/product/${productId}`);
+      let productId = product.id;
+      if (!productId && (product.barcode || product.external_id || product.name)) {
+        productId = await upsertExternalProduct(product);
+      }
+
+      if (productId && productId.trim() !== "") {
+        router.push(`/product/${productId}`);
+      } else {
+        Alert.alert("Product Unavailable", "Product profile is not available yet.");
+      }
     } catch (error) {
       console.error("Failed to navigate to product details:", error);
+      Alert.alert("Product Unavailable", "Product profile is not available yet.");
     }
   };
 
-  const isSaved = (product: Product) => {
-    return savedProducts.some((sp) => 
-      sp.product_id === product.id || 
-      (sp.product?.barcode && sp.product.barcode === product.barcode) ||
-      (sp.product?.external_id && sp.product.external_id === product.external_id)
-    );
-  };
-
-  const toggleSave = async (product: Product) => {
-    if (!userId) return;
-
-    const savedItem = savedProducts.find((sp) => 
-      sp.product_id === product.id || 
-      (sp.product?.barcode && sp.product.barcode === product.barcode) ||
-      (sp.product?.external_id && sp.product.external_id === product.external_id)
-    );
-
-    try {
-      if (savedItem) {
-        await unsaveProduct(userId, savedItem.product_id);
-      } else {
-        await saveProduct(userId, product);
-      }
-      await fetchSavedProducts(userId);
-    } catch (error) {
-      console.error("Error toggling save status:", error);
-    }
-  };
-
-  const renderProduct = ({ item }: { item: Product }) => {
-    const saved = isSaved(item);
-    
-    const productGoals = item.product_goals?.length
-      ? item.product_goals.map(g => g.goal)
-      : (item.inferred_goals || []);
-    const match = calculateMatch(
-      userPreferences?.primary_goals,
-      userPreferences?.health_concerns,
-      productGoals
-    );
-
-    const saveButton = (
-      <Pressable 
-        style={[
-          styles.saveBtn, 
-          { backgroundColor: themeColors.backgroundElement },
-          saved && { backgroundColor: themeColors.text }
-        ]} 
-        onPress={() => toggleSave(item)}
-      >
-        <Text style={[styles.saveBtnText, { color: themeColors.textSecondary }, saved && { color: themeColors.background }]}>
-          {saved ? "Saved" : "Save"}
-        </Text>
-      </Pressable>
-    );
-
-    return (
-      <View style={styles.productRowContainer}>
-        <ProductRow
-          product={item}
-          match={match}
-          goals={productGoals}
-          onPress={() => handleProductTap(item)}
-          rightAccessory={saveButton}
-          style={{
-            backgroundColor: themeColors.background,
-            borderColor: themeColors.borderMuted,
-            borderWidth: 1,
-            borderRadius: BorderRadii.xl,
-            padding: Spacing.md,
-            ...Shadows.low,
-          }}
-        />
-      </View>
-    );
-  };
+  const activeCategory = TOP_CATEGORIES.find(
+    cat => query.toLowerCase().trim() === cat.name.toLowerCase().trim()
+  );
 
   return (
-    <PageContainer>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        
-        {/* Premium Discovery Header */}
-        <View style={styles.heroHeader}>
-          <Pressable 
-            style={[styles.backBtn, { backgroundColor: themeColors.backgroundElement }]} 
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={20} color={themeColors.text} />
-          </Pressable>
-        </View>
-
-        <View style={styles.titleContainer}>
-          <Text style={[styles.heroTitle, { color: themeColors.text }]}>Formulary</Text>
-          <Text style={[styles.heroSubtitle, { color: themeColors.textSecondary }]}>Search verified supplements and clinical protocols.</Text>
-        </View>
-
-        {/* Large Premium Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={[
-            styles.searchInputWrapper, 
-            { 
-              backgroundColor: themeColors.background, 
-              borderColor: themeColors.borderMuted,
-              ...Shadows.premium
-            }
-          ]}>
-            <Ionicons name="search" size={20} color={themeColors.textSecondary} style={{ marginRight: 12 }} />
-            <TextInput
-              style={[styles.searchInput, { color: themeColors.text }]}
-              placeholder="Search formulations, ingredients..."
-              placeholderTextColor={themeColors.textMuted}
-              value={query}
-              onChangeText={(text) => {
-                setQuery(text);
-                if (text === "") {
-                  setHasSearched(false);
-                  setResults([]);
-                }
-              }}
-              onSubmitEditing={() => handleSearch()}
-              returnKeyType="search"
-            />
-            {query.length > 0 && (
-              <Pressable onPress={() => { setQuery(""); setHasSearched(false); setResults([]); }} style={{ padding: 4 }}>
-                <Ionicons name="close-circle" size={18} color={themeColors.textMuted} />
-              </Pressable>
-            )}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {!query && !hasSearched ? (
+        // ─── Discovery State (Scrollable ScrollView) ───────────────────────────
+        <PageContainer scrollable={true} style={{ backgroundColor: screenBg }} contentContainerStyle={getContentContainerStyle(false)}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Pressable 
+              style={[styles.backBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", borderColor: borderCol }]} 
+              onPress={() => router.back()}
+            >
+              <Ionicons name="chevron-back" size={22} color={themeColors.text} />
+            </Pressable>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]}>Search</Text>
+            <View style={{ width: 40 }} />
           </View>
-        </View>
 
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="small" color={themeColors.textSecondary} />
-          </View>
-        ) : results.length === 0 && hasSearched ? (
-          <View style={styles.emptyContainer}>
-            {apiError ? (
-              <>
-                <View style={[styles.emptyIconCircle, { backgroundColor: themeColors.backgroundElement }]}>
-                  <Ionicons name="cloud-offline" size={32} color={themeColors.textMuted} />
-                </View>
-                <Text style={[styles.emptyTitle, { color: themeColors.text }]}>Service Unavailable</Text>
-                <Text style={[styles.emptySubtitle, { color: themeColors.textSecondary }]}>Unable to connect to the medical database.</Text>
-              </>
-            ) : (
-              <>
-                <View style={[styles.emptyIconCircle, { backgroundColor: themeColors.backgroundElement }]}>
-                  <Ionicons name="search" size={32} color={themeColors.textMuted} />
-                </View>
-                <Text style={[styles.emptyTitle, { color: themeColors.text }]}>No Matches Found</Text>
-                <Text style={[styles.emptySubtitle, { color: themeColors.textSecondary }]}>No supplements matched the query. Try alternative ingredient names.</Text>
-              </>
-            )}
-          </View>
-        ) : results.length === 0 && !hasSearched ? (
-          <ScrollView 
-            style={styles.guidedContainer} 
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Active Categories */}
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>Clinical Categories</Text>
+          {/* Search bar */}
+          <View style={styles.searchContainer}>
+            <View style={[styles.searchInputWrapper, { backgroundColor: cardBg, borderColor: borderCol, ...Shadows.low }]}>
+              <Ionicons name="search-outline" size={20} color={themeColors.textSecondary} style={{ marginRight: 12 }} />
+              <TextInput
+                style={[styles.searchInput, { color: themeColors.text }]}
+                placeholder="Search products, brands or ingredients"
+                placeholderTextColor={themeColors.textMuted}
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  if (text === "") {
+                    setHasSearched(false);
+                    setResults([]);
+                  }
+                }}
+                onSubmitEditing={() => handleSearch()}
+                returnKeyType="search"
+                autoFocus={false}
+              />
             </View>
-            <View style={styles.categoriesGrid}>
-              {TOP_CATEGORIES.map(cat => (
-                <Pressable 
-                  key={cat.name} 
-                  style={[
-                    styles.categoryGridCard, 
-                    { 
-                      backgroundColor: themeColors.background, 
-                      borderColor: themeColors.borderMuted,
-                      ...Shadows.low
-                    }
-                  ]}
-                  onPress={() => handleSearch(cat.name)}
-                >
-                  <View style={[styles.categoryIconCircle, { backgroundColor: themeColors.backgroundElement }]}>
-                    <Ionicons name={cat.icon} size={16} color={themeColors.text} />
+          </View>
+
+          {/* Category Chips Scroll */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>Categories</Text>
+          </View>
+          <View style={{ height: 44, marginBottom: Spacing.md }}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoriesScroll}
+              contentContainerStyle={styles.categoriesScrollContent}
+            >
+              {TOP_CATEGORIES.map(cat => {
+                const isActive = activeCategory?.name === cat.name;
+                return (
+                  <Pressable 
+                    key={cat.name} 
+                    style={[
+                      styles.categoryChip, 
+                      { backgroundColor: cardBg, borderColor: borderCol },
+                      isActive && { backgroundColor: themeColors.text, borderColor: themeColors.text }
+                    ]}
+                    onPress={() => handleSearch(cat.name)}
+                  >
+                    <Ionicons 
+                      name={cat.icon} 
+                      size={14} 
+                      color={isActive ? themeColors.background : themeColors.textSecondary} 
+                      style={{ marginRight: 6 }} 
+                    />
+                    <Text 
+                      style={[
+                        styles.categoryChipText, 
+                        { color: themeColors.textSecondary },
+                        isActive && { color: themeColors.background, fontWeight: "700" }
+                      ]}
+                    >
+                      {cat.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Recently Viewed Scroll (up to 5 cards) */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>Recently viewed</Text>
+          </View>
+          {recentlyViewed.length > 0 ? (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.recentScroll}
+              contentContainerStyle={styles.recentScrollContent}
+            >
+              {recentlyViewed.map(rv => {
+                if (!rv.product) return null;
+                return (
+                  <View key={rv.id} style={{ width: 160, marginRight: 12 }}>
+                    <ProductCard 
+                      product={rv.product}
+                      onPress={() => handleProductTap(rv.product!)}
+                      themeColors={themeColors}
+                      isDark={isDark}
+                      cardBg={cardBg}
+                      imageBg={imageBg}
+                      borderCol={borderCol}
+                    />
                   </View>
-                  <Text style={[styles.categoryGridName, { color: themeColors.text }]}>{cat.name}</Text>
-                </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={[styles.recentEmptyCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
+              <Text style={[styles.recentEmptyText, { color: themeColors.textMuted }]}>
+                Products you view will appear here.
+              </Text>
+            </View>
+          )}
+
+          {/* Recommended / Top Rated Grid */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>Recommended</Text>
+          </View>
+          {recommendedProducts.length > 0 ? (
+            <View style={styles.gridContainer}>
+              {recommendedProducts.map(p => (
+                <View key={p.id} style={{ width: "48%", marginBottom: 16 }}>
+                  <ProductCard 
+                    product={p}
+                    onPress={() => handleProductTap(p)}
+                    themeColors={themeColors}
+                    isDark={isDark}
+                    cardBg={cardBg}
+                    imageBg={imageBg}
+                    borderCol={borderCol}
+                  />
+                </View>
               ))}
             </View>
+          ) : (
+            <View style={[styles.recommendedEmptyCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
+              <Text style={[styles.recommendedEmptyTitle, { color: themeColors.text }]}>No recommendations yet</Text>
+              <Text style={[styles.recommendedEmptyText, { color: themeColors.textSecondary }]}>
+                Complete your profile or add products to your stack to improve suggestions.
+              </Text>
+            </View>
+          )}
+        </PageContainer>
+      ) : (
+        // ─── Search Results State (Non-Scrollable Root View) ───────────────────
+        <PageContainer scrollable={false} style={{ backgroundColor: screenBg }} contentContainerStyle={getContentContainerStyle(false)}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Pressable 
+              style={[styles.backBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)", borderColor: borderCol }]} 
+              onPress={() => router.back()}
+            >
+              <Ionicons name="chevron-back" size={22} color={themeColors.text} />
+            </Pressable>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]}>Search</Text>
+            <View style={{ width: 40 }} />
+          </View>
 
-            {/* Recently Analyzed */}
-            {recentlyViewed.length > 0 && (
-              <View style={styles.recentSection}>
-                <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>Recently Analyzed</Text>
-                </View>
-                {recentlyViewed.map(rv => (
-                  <CompactRecentlyViewedRow 
-                    key={rv.id} 
-                    item={rv} 
-                    onPress={() => router.push(`/product/${rv.product_id}`)} 
-                    themeColors={themeColors}
-                  />
-                ))}
-              </View>
-            )}
+          {/* Search bar */}
+          <View style={styles.searchContainer}>
+            <View style={[styles.searchInputWrapper, { backgroundColor: cardBg, borderColor: borderCol, ...Shadows.low }]}>
+              <Ionicons name="search-outline" size={20} color={themeColors.textSecondary} style={{ marginRight: 12 }} />
+              <TextInput
+                style={[styles.searchInput, { color: themeColors.text }]}
+                placeholder="Search products, brands or ingredients"
+                placeholderTextColor={themeColors.textMuted}
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  if (text === "") {
+                    setHasSearched(false);
+                    setResults([]);
+                  }
+                }}
+                onSubmitEditing={() => handleSearch()}
+                returnKeyType="search"
+                autoFocus={false}
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => { setQuery(""); setHasSearched(false); setResults([]); }} style={{ padding: 4 }}>
+                  <Ionicons name="close-circle" size={18} color={themeColors.textMuted} />
+                </Pressable>
+              )}
+            </View>
+          </View>
 
-            {/* Recent Queries */}
-            {recentSearches.length > 0 && (
-              <View style={styles.recentSection}>
-                <View style={styles.recentHeader}>
-                  <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>Recent Queries</Text>
-                  <Pressable onPress={clearRecentSearches} style={styles.clearBtn} hitSlop={12}>
-                    <Text style={[styles.clearBtnText, { color: themeColors.textSecondary }]}>Clear</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.recentChipsContainer}>
-                  {recentSearches.map((term, index) => (
-                    <Pressable 
-                      key={`${term}-${index}`} 
+          {/* Category Chips Scroll (for quick filtering) */}
+          <View style={{ height: 44, marginBottom: Spacing.sm }}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoriesScroll}
+              contentContainerStyle={styles.categoriesScrollContent}
+            >
+              {TOP_CATEGORIES.map(cat => {
+                const isActive = activeCategory?.name === cat.name;
+                return (
+                  <Pressable 
+                    key={cat.name} 
+                    style={[
+                      styles.categoryChip, 
+                      { backgroundColor: cardBg, borderColor: borderCol },
+                      isActive && { backgroundColor: themeColors.text, borderColor: themeColors.text }
+                    ]}
+                    onPress={() => {
+                      if (isActive) {
+                        setQuery("");
+                        setHasSearched(false);
+                        setResults([]);
+                      } else {
+                        handleSearch(cat.name);
+                      }
+                    }}
+                  >
+                    <Ionicons 
+                      name={cat.icon} 
+                      size={14} 
+                      color={isActive ? themeColors.background : themeColors.textSecondary} 
+                      style={{ marginRight: 6 }} 
+                    />
+                    <Text 
                       style={[
-                        styles.recentSearchChip, 
-                        { 
-                          backgroundColor: themeColors.background, 
-                          borderColor: themeColors.borderMuted,
-                          ...Shadows.low
-                        }
+                        styles.categoryChipText, 
+                        { color: themeColors.textSecondary },
+                        isActive && { color: themeColors.background, fontWeight: "700" }
                       ]}
-                      onPress={() => handleSearch(term)}
                     >
-                      <Ionicons name="time-outline" size={12} color={themeColors.textMuted} style={{ marginRight: 6 }} />
-                      <Text style={[styles.recentSearchChipText, { color: themeColors.textSecondary }]}>{term}</Text>
-                    </Pressable>
-                  ))}
+                      {cat.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {loading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="small" color={themeColors.text} />
+            </View>
+          ) : results.length === 0 && hasSearched ? (
+            <View style={styles.emptyResultsContainer}>
+              <Ionicons name="search-outline" size={48} color={themeColors.textMuted} style={{ marginBottom: 16 }} />
+              <Text style={[styles.emptyResultsTitle, { color: themeColors.text }]}>No products found</Text>
+              <Text style={[styles.emptyResultsText, { color: themeColors.textSecondary }]}>
+                Try searching for a brand, ingredient or category.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={results}
+              keyExtractor={(item, index) => item.id || `res-${index}`}
+              numColumns={2}
+              columnWrapperStyle={styles.columnWrapper}
+              renderItem={({ item }) => (
+                <View style={{ width: "48%", marginBottom: 16 }}>
+                  <ProductCard 
+                    product={item}
+                    onPress={() => handleProductTap(item)}
+                    themeColors={themeColors}
+                    isDark={isDark}
+                    cardBg={cardBg}
+                    imageBg={imageBg}
+                    borderCol={borderCol}
+                  />
                 </View>
-              </View>
-            )}
-            <View style={{ height: 100 }} />
-          </ScrollView>
-        ) : (
-          <FlatList
-            data={results}
-            keyExtractor={(item, index) => item.id || `temp-${index}`}
-            renderItem={renderProduct}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </KeyboardAvoidingView>
-    </PageContainer>
+              )}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </PageContainer>
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  heroHeader: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 24,
+    justifyContent: "space-between",
     paddingTop: 16,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   backBtn: {
     width: 40,
@@ -450,212 +591,179 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
   },
-  titleContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  heroTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    marginBottom: 6,
-  },
-  heroSubtitle: {
-    fontSize: 15,
-    fontWeight: "400",
-    lineHeight: 22,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
   },
   searchContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingVertical: 16,
   },
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 100,
     paddingHorizontal: 20,
-    height: 56,
+    height: 52,
     borderWidth: 1,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
     padding: 0,
+  },
+  sectionHeader: {
+    marginBottom: 12,
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  categoriesScroll: {
+  },
+  categoriesScrollContent: {
+    paddingRight: 48,
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 100,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  recentScroll: {
+  },
+  recentScrollContent: {
+    paddingRight: 48,
+  },
+  recentEmptyCard: {
+    padding: 20,
+    borderRadius: BorderRadii.xl,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recentEmptyText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  recommendedEmptyCard: {
+    padding: 24,
+    borderRadius: BorderRadii.xl,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recommendedEmptyTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  recommendedEmptyText: {
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
   },
   centerContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingBottom: 80,
   },
-  emptyContainer: {
+  emptyResultsContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 40,
-    paddingBottom: 80,
+    paddingBottom: 120,
   },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
+  emptyResultsTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 6,
   },
-  emptyTitle: { 
-    fontSize: 20, 
-    fontWeight: "700", 
-    marginBottom: 8,
-    letterSpacing: -0.3,
+  emptyResultsText: {
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
   },
-  emptySubtitle: { 
-    fontSize: 15, 
-    textAlign: "center", 
-    lineHeight: 22 
+  columnWrapper: {
+    justifyContent: "space-between",
   },
   listContent: {
-    paddingTop: 8,
-    paddingBottom: 100,
+    paddingBottom: 60,
   },
-  productRowContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 12,
-  },
-  saveBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 100,
-  },
-  saveBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  guidedContainer: {
+  productCard: {
+    borderRadius: BorderRadii.xl,
+    borderWidth: 1,
+    padding: 12,
     flex: 1,
   },
-  sectionHeader: {
-    paddingHorizontal: 24,
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  categoriesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    marginBottom: 16,
-  },
-  categoryGridCard: {
-    width: "48%",
-    borderRadius: BorderRadii.xl,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    alignItems: "flex-start",
-  },
-  categoryIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  productImageContainer: {
+    borderRadius: BorderRadii.lg,
+    height: 100,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
-  },
-  categoryGridName: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  recentSection: {
-    marginTop: 24,
-  },
-  recentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  clearBtn: {
+    marginBottom: 10,
+    overflow: "hidden",
     padding: 8,
   },
-  clearBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
+  productImage: {
+    width: "100%",
+    height: "100%",
+  },
+  productInfoContainer: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  productBrand: {
+    fontSize: 11,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  recentChipsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    paddingHorizontal: 24,
-  },
-  recentSearchChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 100,
-  },
-  recentSearchChipText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  compactRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: BorderRadii.xl,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    marginHorizontal: 24,
-  },
-  compactImageContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadii.md,
-    overflow: "hidden",
-    marginRight: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  compactImage: {
-    width: "80%",
-    height: "80%",
-    resizeMode: "contain",
-  },
-  compactInfo: {
-    flex: 1,
-    marginRight: 16,
-  },
-  compactName: {
-    fontSize: 15,
+  productNameText: {
+    fontSize: 14,
     fontWeight: "600",
-    marginBottom: 4,
-    letterSpacing: -0.2,
+    lineHeight: 18,
+    marginBottom: 8,
   },
-  compactBrand: {
-    fontSize: 13,
-  },
-  scoreBadgeMini: {
+  productBadgeRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: "auto",
+  },
+  qualityBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: BorderRadii.sm,
   },
-  scoreBadgeText: {
-    fontSize: 12,
+  qualityBadgeText: {
+    fontSize: 10,
     fontWeight: "700",
+  },
+  productCategoryLabel: {
+    fontSize: 11,
+    maxWidth: "55%",
   },
 });

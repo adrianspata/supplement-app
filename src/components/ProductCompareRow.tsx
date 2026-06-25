@@ -53,7 +53,7 @@ export function ProductCompareRow({ product, match, onPress }: ProductCompareRow
         </View>
         <View style={styles.headerContent}>
           <Text style={[styles.brand, { color: themeColors.textSecondary }]} numberOfLines={1}>
-            {formatBrandName(product.brands?.name || product.brand) || "Elexir Curated"}
+            {formatBrandName(product.brands?.name || product.brand) || "Basis Curated"}
           </Text>
           <Text style={[styles.name, { color: themeColors.text }]} numberOfLines={2}>
             {formatProductName(product.name)}
