@@ -72,6 +72,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("[AuthContext] Profile upsert threw an error:", upsertError);
       }
 
+      // Query profiles for onboarding_completed status
+      let profilesOnboardingCompleted = false;
+      try {
+        const { data: profileData, error: profileFetchError } = await supabase
+          .from("profiles")
+          .select("onboarding_completed")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (!profileFetchError && profileData) {
+          profilesOnboardingCompleted = profileData.onboarding_completed ?? false;
+        }
+      } catch (profileFetchErr) {
+        console.error("[AuthContext] Profiles onboarding query error:", profileFetchErr);
+      }
+
       console.log("[AuthContext] preferences query starting");
       
       const queryPromise = supabase
@@ -89,13 +105,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log("[AuthContext] preferences query resolved");
       console.log("[AuthContext] user_preferences fetch result:", { hasData: !!data, error });
 
+      let preferencesCompleted = false;
+      let hasGoals = false;
+
       if (!error && data) {
-        finalOnboardingState = data.completed_onboarding ?? false;
+        preferencesCompleted = data.completed_onboarding ?? false;
+        hasGoals = Array.isArray(data.primary_goals) && data.primary_goals.length > 0;
         finalPreferences = data as UserPreferences;
       } else {
-        finalOnboardingState = false;
         finalPreferences = null;
       }
+
+      // Determine final onboarding state:
+      if (profilesOnboardingCompleted || preferencesCompleted) {
+        finalOnboardingState = true;
+      } else if (hasGoals) {
+        console.log("[AuthContext] Legacy recovery logic triggered: user has goals but completion flags are false. Treating as completed.");
+        finalOnboardingState = true;
+
+        // Sync both completion flags to true in the background
+        Promise.all([
+          supabase.from("profiles").update({ onboarding_completed: true }).eq("id", userId),
+          supabase.from("user_preferences").update({ completed_onboarding: true }).eq("user_id", userId)
+        ])
+          .then(([profileRes, prefRes]) => {
+            console.log("[AuthContext] Background sync of completion flags finished", {
+              profileSyncError: profileRes.error,
+              prefSyncError: prefRes.error
+            });
+          })
+          .catch(err => {
+            console.error("[AuthContext] Background sync of completion flags failed:", err);
+          });
+      } else {
+        finalOnboardingState = false;
+      }
+
+      // Temporary debug log
+      console.log("[AuthContext QA Log]", {
+        userId,
+        profilesOnboardingCompleted,
+        preferencesCompleted,
+        hasGoals,
+        finalOnboardingState
+      });
+
     } catch (e) {
       console.error("[AuthContext] fetchUserData error:", e);
       finalOnboardingState = false;
@@ -114,40 +168,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        setSession(session);
-        if (session) {
-          await fetchUserData(session.user.id, session.user.email, session.user.user_metadata);
-        } else {
-          // No session — nothing to load
-          setOnboardingCompleted(null);
-        }
-      } catch (e) {
-        console.error("Supabase init error:", e);
-      } finally {
-        setInitialized(true);
-      }
-    };
-
-    init();
+    let isMounted = true;
+    let isFirstAuthEvent = true;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       console.log("[AuthContext] onAuthStateChange event:", event, "hasSession:", !!newSession);
+      
+      if (!isMounted) return;
+
       setSession(newSession);
       if (newSession) {
         await fetchUserData(newSession.user.id, newSession.user.email, newSession.user.user_metadata);
       } else {
         setOnboardingCompleted(null);
+        setUserPreferences(null);
+      }
+      
+      if (isFirstAuthEvent) {
+        isFirstAuthEvent = false;
+        setInitialized(true);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
