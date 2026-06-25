@@ -293,7 +293,7 @@ export async function getRecentlyViewedProducts(userId: string): Promise<Recentl
  * Gets recommended products for a user based on their primary goals.
  * Excludes products already saved or in the user's stack.
  */
-export async function getRecommendedProducts(userId: string, primaryGoals: string[], healthConcerns: string[] = [], existingSupplements: string[] = [], dietType?: string | null): Promise<RecommendedProduct[]> {
+export async function getRecommendedProducts(userId: string, primaryGoals: string[], healthConcerns: string[] = [], currentSupplements: string[] = [], dietType?: string | null): Promise<RecommendedProduct[]> {
   if (!primaryGoals || primaryGoals.length === 0) return [];
 
   // Get user's saved and stacked product IDs to exclude them
@@ -357,14 +357,14 @@ export async function getRecommendedProducts(userId: string, primaryGoals: strin
     const match = calculateMatch(primaryGoals, healthConcerns, productGoals);
     
     let penalty = 0;
-    if (existingSupplements.length > 0) {
+    if (currentSupplements.length > 0) {
       const pText = [
         p.name,
         p.brand,
         ...(p.product_ingredients?.map(i => i.ingredient?.name) || [])
       ].filter(Boolean).join(" ").toLowerCase();
       
-      existingSupplements.forEach(es => {
+      currentSupplements.forEach(es => {
         if (pText.includes(es.toLowerCase())) {
           penalty += 5;
         }

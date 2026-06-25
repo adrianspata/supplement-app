@@ -1,14 +1,24 @@
 import { supabase } from "./supabase";
 import { UserStackItem, StackTiming, DailyStackLog } from "./types";
 
-export async function addToStack(userId: string, productId: string, timing: StackTiming): Promise<void> {
+export async function addProductToStack(
+  userId: string, 
+  productId: string, 
+  timing: StackTiming, 
+  dosage: string | null = null, 
+  frequency: string | null = 'Daily', 
+  notes: string | null = null
+): Promise<void> {
   const { error } = await supabase
-    .from("user_product_stack")
+    .from("user_stack_items")
     .upsert(
       {
         user_id: userId,
         product_id: productId,
         timing,
+        dosage,
+        frequency,
+        notes,
       },
       { onConflict: "user_id,product_id,timing" }
     );
@@ -16,20 +26,27 @@ export async function addToStack(userId: string, productId: string, timing: Stac
   if (error) throw error;
 }
 
-export async function removeFromStack(userId: string, productId: string, timing: StackTiming): Promise<void> {
+export async function removeStackItem(id: string): Promise<void> {
   const { error } = await supabase
-    .from("user_product_stack")
+    .from("user_stack_items")
     .delete()
-    .eq("user_id", userId)
-    .eq("product_id", productId)
-    .eq("timing", timing);
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+export async function updateStackItem(id: string, payload: Partial<UserStackItem>): Promise<void> {
+  const { error } = await supabase
+    .from("user_stack_items")
+    .update(payload)
+    .eq("id", id);
 
   if (error) throw error;
 }
 
 export async function getUserStack(userId: string): Promise<UserStackItem[]> {
   const { data, error } = await supabase
-    .from("user_product_stack")
+    .from("user_stack_items")
     .select(`
       *,
       product:products (
@@ -51,57 +68,4 @@ export async function getUserStack(userId: string): Promise<UserStackItem[]> {
   return data as UserStackItem[];
 }
 
-export async function getDailyLogs(userId: string, date: string): Promise<DailyStackLog[]> {
-  const { data, error } = await supabase
-    .from("daily_stack_logs")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("log_date", date);
 
-  if (error) {
-    console.error("Error fetching daily logs:", error);
-    return [];
-  }
-
-  return data as DailyStackLog[];
-}
-
-export async function getLogsForDateRange(userId: string, startDate: string, endDate: string): Promise<DailyStackLog[]> {
-  const { data, error } = await supabase
-    .from("daily_stack_logs")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("log_date", startDate)
-    .lte("log_date", endDate);
-
-  if (error) {
-    console.error("Error fetching logs for date range:", error);
-    return [];
-  }
-
-  return data as DailyStackLog[];
-}
-
-export async function toggleDailyLog(
-  userId: string,
-  stackItemId: string,
-  productId: string,
-  date: string,
-  taken: boolean
-): Promise<void> {
-  const { error } = await supabase
-    .from("daily_stack_logs")
-    .upsert(
-      {
-        user_id: userId,
-        stack_item_id: stackItemId,
-        product_id: productId,
-        log_date: date,
-        taken,
-        taken_at: taken ? new Date().toISOString() : null,
-      },
-      { onConflict: "user_id,stack_item_id,log_date" }
-    );
-
-  if (error) throw error;
-}

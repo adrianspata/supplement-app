@@ -1,4 +1,4 @@
-import { UserStackItem, DailyStackLog, UserProfile } from "./types";
+import { UserStackItem, DailyProtocolLog } from "./types";
 import { formatGoalLabel } from "./productDisplay";
 
 export interface StackInsightsResult {
@@ -17,9 +17,9 @@ export interface StackInsightsResult {
 }
 
 export function generateStackInsights(
-  profile: UserProfile | null,
+  profile: any,
   stack: UserStackItem[],
-  recentLogs: DailyStackLog[]
+  recentLogs: DailyProtocolLog[]
 ): StackInsightsResult {
   const trackedGoals = new Set([
     ...(profile?.primary_goals || []),
@@ -58,8 +58,8 @@ export function generateStackInsights(
 
   // Today's Status
   const todayStr = new Date().toISOString().split("T")[0];
-  const todaysLogs = recentLogs.filter(l => l.log_date === todayStr);
-  const itemsCompletedToday = todaysLogs.filter(l => l.taken).length;
+  const todaysLogs = recentLogs.filter(l => l.scheduled_for === todayStr);
+  const itemsCompletedToday = todaysLogs.filter(l => l.status === 'taken').length;
   const totalScheduledToday = stack.length;
   
   let todayStatus = "Your stack is empty";
@@ -94,8 +94,8 @@ export function generateStackInsights(
   // Weekly Reflection
   const activeDays = new Set<string>();
   recentLogs.forEach(log => {
-    if (log.taken) {
-      activeDays.add(log.log_date);
+    if (log.status === 'taken') {
+      activeDays.add(log.scheduled_for);
     }
   });
 

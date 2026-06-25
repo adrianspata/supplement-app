@@ -33,7 +33,9 @@ export async function upsertTodayCheckIn(
   const payload = {
     user_id: userId,
     checkin_date: todayStr,
-    ...scores,
+    sleep_score: (scores.sleep_score !== null && scores.sleep_score !== undefined) ? scores.sleep_score : 3,
+    stress_score: (scores.stress_score !== null && scores.stress_score !== undefined) ? scores.stress_score : 3,
+    energy_score: (scores.energy_score !== null && scores.energy_score !== undefined) ? scores.energy_score : 3,
     updated_at: new Date().toISOString()
   };
 

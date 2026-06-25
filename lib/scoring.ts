@@ -5,10 +5,11 @@ export type ElexirScoreResult = {
   pros: string[];
   thingsToKnow: string[];
   breakdown: {
+    ingredientQuality: number;
+    dosageQuality: number;
     transparency: number;
-    ingredients: number;
-    quality: number;
-    goalRelevance: number;
+    evidence: number;
+    cleanliness: number;
   };
 };
 
@@ -17,59 +18,56 @@ export function calculateElexirScore(product: Product): ElexirScoreResult {
   const pros: string[] = [];
   const thingsToKnow: string[] = [];
 
+  let ingredientQuality = 0;
+  let dosageQuality = 0;
   let transparency = 0;
-  let ingredientsScore = 0;
-  let quality = 0;
-  let goalRelevance = 0;
+  let evidence = 0;
+  let cleanliness = 0;
 
-  // 1. Transparency (25 points)
+  // 1. Transparency (20 points)
   const hasBrand = !!(product.brands?.name || product.brand);
-  if (hasBrand) transparency += 6;
+  if (hasBrand) transparency += 5;
 
   const hasCategory = !!product.category;
-  if (hasCategory) transparency += 6;
+  if (hasCategory) transparency += 5;
 
   const hasImage = !!product.image_url;
-  if (hasImage) transparency += 7;
+  if (hasImage) transparency += 5;
 
   const hasBasicInfo = !!product.name;
-  if (hasBasicInfo) transparency += 6;
+  if (hasBasicInfo) transparency += 5;
 
-  if (!hasBrand || !hasCategory || !hasImage || !hasBasicInfo) {
-    thingsToKnow.push("Incomplete product metadata.");
-  }
-
-  // 2. Goal Relevance (25 points)
-  const explicitGoals = product.product_goals?.length ? product.product_goals.map(g => g.goal) : [];
-  const inferredGoals = product.inferred_goals || [];
-  const allGoals = [...explicitGoals, ...inferredGoals];
-  
-  if (allGoals.length > 0) {
-    goalRelevance += 25;
-    pros.push("Targeted formulation (goals specified).");
+  if (transparency >= 15) {
+    pros.push("High level of product transparency.");
   } else {
-    thingsToKnow.push("No specific wellness goals identified.");
+    thingsToKnow.push("Incomplete product metadata or brand transparency.");
   }
 
-  // 3. Ingredient Transparency (30 points)
-  const ingredients = product.product_ingredients || [];
+  // 2. Ingredient Quality & Dosage Quality (40 points total)
+  let ingredients = product.product_ingredients || [];
   
+  // Fallback for curated/raw_data ingredients
+  if (ingredients.length === 0 && (product.raw_data?.supplement_facts?.active_ingredients || product.supplement_facts?.active_ingredients)) {
+    ingredients = (product.raw_data?.supplement_facts?.active_ingredients || product.supplement_facts?.active_ingredients) as any[];
+  }
+
   if (ingredients.length > 0) {
-    ingredientsScore += 10;
+    ingredientQuality += 10;
+    dosageQuality += 10;
     
-    const hasAnyAmount = ingredients.some(i => i.amount != null);
+    const hasAnyAmount = ingredients.some(i => i.amount != null && String(i.amount) !== "");
     const hasAnyForm = ingredients.some(i => !!i.form);
 
     if (hasAnyAmount) {
-      ingredientsScore += 10;
-      pros.push("Transparent ingredient dosages.");
+      dosageQuality += 10;
+      pros.push("Transparent clinical dosages.");
     } else {
       thingsToKnow.push("Proprietary blend or missing exact dosages.");
     }
 
     if (hasAnyForm) {
-      ingredientsScore += 10;
-      pros.push("Specific ingredient forms identified.");
+      ingredientQuality += 10;
+      pros.push("Specific high-quality ingredient forms identified.");
     } else {
       thingsToKnow.push("Chemical form of ingredients not specified.");
     }
@@ -77,24 +75,46 @@ export function calculateElexirScore(product: Product): ElexirScoreResult {
     thingsToKnow.push("No detailed ingredient list available.");
   }
 
-  // 4. Quality Transparency (20 points)
-  const attributes = product.product_quality_attributes?.map(a => a.attribute.toLowerCase()) || [];
+  // 3. Evidence (Goal Relevance + Clinical Fit) (20 points)
+  const explicitGoals = product.product_goals?.length ? product.product_goals.map(g => g.goal) : [];
+  const inferredGoals = product.inferred_goals || [];
+  const allGoals = [...explicitGoals, ...inferredGoals];
   
+  if (allGoals.length > 0) {
+    evidence += 10;
+    pros.push("Targeted formulation for specific clinical goals.");
+  }
+
+  const attributes = product.product_quality_attributes?.map(a => a.attribute.toLowerCase()) || [];
   const isThirdPartyTested = attributes.includes("third_party_tested");
-  if (isThirdPartyTested) {
-    quality += 10;
-    pros.push("Third-party tested for quality.");
-  } else {
-    thingsToKnow.push("No third-party testing information provided.");
+  const isCurated = product.source === "curated" || product.source === "elexir_curated" || product.verified_status === "verified";
+
+  if (isThirdPartyTested || isCurated) {
+    evidence += 10;
+    pros.push("Verified clinical profile or third-party tested.");
+  } else if (allGoals.length === 0) {
+    thingsToKnow.push("Lacks explicit verified clinical evidence.");
   }
 
-  const hasOtherAttributes = attributes.some(a => a !== "third_party_tested");
-  if (hasOtherAttributes) {
-    quality += 10;
-    pros.push("Contains verified quality attributes.");
+  // 4. Cleanliness (20 points)
+  cleanliness += 5; // Base points for having a product
+  
+  if (product.vegan || attributes.includes("vegan")) {
+    cleanliness += 5;
+  }
+  if (product.gluten_free || attributes.includes("gluten_free") || attributes.includes("gluten-free")) {
+    cleanliness += 5;
+  }
+  if (product.dairy_free || attributes.includes("dairy_free") || attributes.includes("dairy-free")) {
+    cleanliness += 5;
+  }
+  
+  if (cleanliness >= 15) {
+    pros.push("Clean formulation free of major allergens.");
   }
 
-  score = transparency + ingredientsScore + quality + goalRelevance;
+  // Total Score
+  score = transparency + ingredientQuality + dosageQuality + evidence + cleanliness;
   score = Math.min(Math.max(score, 0), 100);
 
   return { 
@@ -102,10 +122,11 @@ export function calculateElexirScore(product: Product): ElexirScoreResult {
     pros, 
     thingsToKnow,
     breakdown: {
+      ingredientQuality,
+      dosageQuality,
       transparency,
-      ingredients: ingredientsScore,
-      quality,
-      goalRelevance
+      evidence,
+      cleanliness
     }
   };
 }

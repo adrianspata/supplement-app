@@ -1,9 +1,9 @@
-import { DailyCheckIn, DailyStackLog, UserStackItem } from "./types";
+import { DailyCheckIn, DailyProtocolLog, UserStackItem } from "./types";
 
 export interface TrendCalculation {
   metric: 'sleep' | 'energy' | 'stress';
   label: string;
-  emoji: string;
+  icon: string;
   currentAverage: number | null;
   previousAverage: number | null;
   trend: 'improving' | 'stable' | 'declining';
@@ -34,7 +34,7 @@ export function getLocalDateString(offsetDays = 0): string {
 
 export function computeTrendsAndReflection(
   checkins: DailyCheckIn[],
-  logs: DailyStackLog[],
+  logs: DailyProtocolLog[],
   userStack: UserStackItem[]
 ): WeeklyReflectionData {
   const todayStr = getLocalDateString(0);
@@ -45,19 +45,19 @@ export function computeTrendsAndReflection(
     checkinsByDate[c.checkin_date] = c;
   });
 
-  const logsByDateAndStack: Record<string, Record<string, DailyStackLog>> = {};
+  const logsByDateAndStack: Record<string, Record<string, DailyProtocolLog>> = {};
   logs.forEach(l => {
-    if (!logsByDateAndStack[l.log_date]) {
-      logsByDateAndStack[l.log_date] = {};
+    if (!logsByDateAndStack[l.scheduled_for]) {
+      logsByDateAndStack[l.scheduled_for] = {};
     }
-    logsByDateAndStack[l.log_date][l.stack_item_id] = l;
+    logsByDateAndStack[l.scheduled_for][l.stack_item_id] = l;
   });
 
   // Determine stack completion for a date
   const isStackCompleted = (dateStr: string): boolean => {
     if (userStack.length === 0) return false;
     const dayLogs = logsByDateAndStack[dateStr] || {};
-    const completedCount = userStack.filter(item => dayLogs[item.id]?.taken).length;
+    const completedCount = userStack.filter(item => dayLogs[item.id]?.status === 'taken').length;
     return completedCount === userStack.length;
   };
 
@@ -116,14 +116,13 @@ export function computeTrendsAndReflection(
     streakText = `${streak}-day streak — keep logging to unlock insights.`;
   }
 
-  // 3. Trends calculation (Sleep, Energy, Stress)
-  const metrics: Array<{ key: 'sleep' | 'energy' | 'stress'; scoreField: 'sleep_score' | 'energy_score' | 'stress_score'; label: string; emoji: string }> = [
-    { key: 'sleep', scoreField: 'sleep_score', label: 'Sleep', emoji: '🌙' },
-    { key: 'energy', scoreField: 'energy_score', label: 'Energy', emoji: '⚡️' },
-    { key: 'stress', scoreField: 'stress_score', label: 'Stress', emoji: '🧘' }
+  const metrics: Array<{ key: 'sleep' | 'energy' | 'stress'; scoreField: 'sleep_score' | 'energy_score' | 'stress_score'; label: string; icon: string }> = [
+    { key: 'sleep', scoreField: 'sleep_score', label: 'Sleep', icon: 'moon' },
+    { key: 'energy', scoreField: 'energy_score', label: 'Energy', icon: 'flash' },
+    { key: 'stress', scoreField: 'stress_score', label: 'Stress', icon: 'leaf' }
   ];
 
-  const trends: TrendCalculation[] = metrics.map(({ key, scoreField, label, emoji }) => {
+  const trends: TrendCalculation[] = metrics.map(({ key, scoreField, label, icon }) => {
     // Current period (Last 7 days: t-0 to t-6)
     const currentScores: number[] = [];
     const history7d: number[] = [];
@@ -174,7 +173,7 @@ export function computeTrendsAndReflection(
     return {
       metric: key,
       label,
-      emoji,
+      icon,
       currentAverage,
       previousAverage,
       trend,
