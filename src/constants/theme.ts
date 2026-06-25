@@ -5,22 +5,22 @@ import { Platform } from 'react-native';
 export const Colors = {
   light: {
     // Standard keys for compatibility
-    text: '#111111',
-    background: '#FFFFFF', // Pure White Canvas
-    backgroundElement: '#F4F4F6',
-    backgroundSelected: '#EAEAEA',
-    textSecondary: '#6B6B6B',
-    textMuted: '#A0A0A0',
+    text: '#1C1C1E',
+    background: '#F4F4F6', // Light grey/off-white screen background (Bevel style)
+    backgroundElement: '#EBEAEF',
+    backgroundSelected: '#E5E5EA',
+    textSecondary: '#636366',
+    textMuted: '#8E8E93',
 
     // Premium custom keys
-    backgroundSecondary: '#F7F7F7',
-    border: '#EAEAEA',
-    borderMuted: '#F4F4F4',
-    primary: '#111111',
+    backgroundSecondary: '#FFFFFF', // Pure white card background (Bevel style)
+    border: '#E5E5EA',
+    borderMuted: '#F2F2F7',
+    primary: '#1C1C1E',
 
-    success: '#22C55E',
-    warning: '#F59E0B',
-    error: '#F59E0B', // Replacing red/error with orange as per strict color rules
+    success: '#34C759', // Bevel green
+    warning: '#FF9500', // Bevel orange
+    error: '#FF3B30', // Bevel red
   },
   dark: {
     text: '#FFFFFF',
@@ -229,4 +229,21 @@ export const ChartColors = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+export const Layout = {
+  screenPadding: 24,
+  bottomTabPadding: 140,
+  maxContentWidth: 640,
+};
+
+export function getContentContainerStyle(isTabScreen: boolean = true) {
+  return {
+    width: "100%" as const,
+    maxWidth: Layout.maxContentWidth,
+    alignSelf: "center" as const,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: isTabScreen ? Layout.bottomTabPadding : 40,
+  };
+}
+
 

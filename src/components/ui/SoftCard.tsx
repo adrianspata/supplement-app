@@ -16,7 +16,7 @@ export function SoftCard({ children, style, variant = 'elevated', ...props }: So
   const cardStyle = [
     styles.base,
     {
-      backgroundColor: themeColors.background,
+      backgroundColor: themeColors.backgroundSecondary,
       borderColor: themeColors.border,
     },
     variant === 'elevated' && {
@@ -28,7 +28,7 @@ export function SoftCard({ children, style, variant = 'elevated', ...props }: So
       borderWidth: 1.5,
     },
     variant === 'flat' && {
-      backgroundColor: themeColors.backgroundSecondary,
+      backgroundColor: themeColors.backgroundElement,
     },
     style,
   ];
@@ -45,6 +45,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadii.xxl,
     padding: 24,
     marginBottom: 20,
-    marginHorizontal: 20,
+    width: '100%',
   },
 });

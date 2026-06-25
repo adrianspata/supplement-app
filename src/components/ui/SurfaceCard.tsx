@@ -1,4 +1,4 @@
-import { BlurView } from 'expo-blur';
+import { GlassSurface } from './GlassSurface';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useRef } from 'react';
 import {
@@ -93,11 +93,13 @@ export function SurfaceCard({
   const content = (
     <View style={[baseStyle, getVariantStyles(), style]}>
       {variant === 'glass' && Platform.OS !== 'android' ? (
-        <BlurView
+        <GlassSurface
           intensity={BlurLevels.level2}
           tint={colorScheme}
           style={StyleSheet.absoluteFill}
-        />
+        >
+          <View />
+        </GlassSurface>
       ) : null}
 
       {variant === 'atmospheric' ? (

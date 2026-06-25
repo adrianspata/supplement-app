@@ -50,7 +50,7 @@ export function ElexirCoachCard({ insights }: ElexirCoachCardProps) {
       <View style={styles.header}>
         <View style={styles.header}>
           <Ionicons name="sparkles" size={14} color={themeColors.text} style={{ marginRight: 6 }} />
-          <Text style={[styles.coachLabel, { color: themeColors.text }]}>Elexir AI Coach</Text>
+          <Text style={[styles.coachLabel, { color: themeColors.text }]}>Basis Coach</Text>
         </View>
         <Ionicons name="refresh-outline" size={14} color={themeColors.textSecondary} />
       </View>
