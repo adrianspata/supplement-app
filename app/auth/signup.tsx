@@ -113,7 +113,7 @@ export default function Signup() {
           </Pressable>
 
           <View style={styles.headerContainer}>
-            <Text style={styles.title}>Create your Elexir account</Text>
+            <Text style={styles.title}>Create your Basis account</Text>
             <Text style={styles.subtitle}>
               Track your routine, understand your progress, and build a supplement plan that works for you.
             </Text>

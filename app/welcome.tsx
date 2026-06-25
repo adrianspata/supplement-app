@@ -14,7 +14,7 @@ export default function Welcome() {
           <View style={styles.logoContainer}>
             <Text style={styles.logoIcon}>🧬</Text>
           </View>
-          <Text style={styles.logoText}>Elexir</Text>
+          <Text style={styles.logoText}>Basis</Text>
           <Text style={styles.tagline}>Supplement & wellness optimization</Text>
         </View>
 
@@ -22,7 +22,7 @@ export default function Welcome() {
         <View style={styles.hero}>
           <Text style={styles.headline}>Your personal{"\n"}supplement cabinet.</Text>
           <Text style={styles.subtitle}>
-            Manage your supplements, track adherence, monitor wellness and optimise your health protocols.
+            Manage your supplements, track adherence, monitor wellness and optimise your daily plan.
           </Text>
         </View>
 
@@ -61,7 +61,7 @@ export default function Welcome() {
         {/* Benefits Section */}
         <View style={styles.benefitsContainer}>
           <BenefitCard icon="🧴" title="Health Cabinet" desc="Organise all your supplements, vitamins and wellness products in one place." />
-          <BenefitCard icon="💊" title="Daily Stack" desc="Build and track your personalised supplement protocol." />
+          <BenefitCard icon="💊" title="Daily Stack" desc="Build and track your personalised supplement plan." />
           <BenefitCard icon="📊" title="Wellness Tracking" desc="Log energy, sleep, mood and supplement adherence daily." />
           <BenefitCard icon="🔔" title="Smart Reminders" desc="Never miss a dose with intelligent refill and intake alerts." />
         </View>

@@ -1,8 +1,9 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getUserStack, getLogsForDateRange } from "./stack";
-import { Platform } from "react-native";
+import { getUserStack } from "./stack";
+import { getProtocolLogsForDateRange } from "./protocol";
+import { Platform, Alert } from "react-native";
 
 const REMINDERS_ENABLED_KEY = "ELEXIR_REMINDERS_ENABLED";
 
@@ -29,6 +30,10 @@ export async function setRemindersEnabled(enabled: boolean): Promise<void> {
       if (finalStatus !== 'granted') {
         // They denied it, so revert the toggle
         await AsyncStorage.setItem(REMINDERS_ENABLED_KEY, "false");
+        Alert.alert(
+          "Notifications Disabled",
+          "Please enable notifications in your device settings to receive Basis stack reminders."
+        );
       }
     } else if (!enabled) {
       await Notifications.cancelAllScheduledNotificationsAsync();
@@ -55,7 +60,7 @@ export async function syncNotifications(userId: string) {
 
     const [userStack, logs] = await Promise.all([
       getUserStack(userId),
-      getLogsForDateRange(userId, startDate, endDate)
+      getProtocolLogsForDateRange(userId, startDate, endDate)
     ]);
 
     if (userStack.length === 0) return;
@@ -69,8 +74,8 @@ export async function syncNotifications(userId: string) {
 
     // Helper to get log taken status
     const isTaken = (stackItemId: string, dateStr: string) => {
-      const log = logs.find(l => l.stack_item_id === stackItemId && l.log_date === dateStr);
-      return log?.taken ?? false;
+      const log = logs.find((l: any) => l.stack_item_id === stackItemId && l.log_date === dateStr);
+      return log?.status === 'taken';
     };
 
     // 4. Sliding Window: Schedule for the next 7 days
@@ -81,13 +86,13 @@ export async function syncNotifications(userId: string) {
       const isToday = dayOffset === 0;
 
       for (const timing of ["morning", "afternoon", "evening"] as const) {
-        const items = userStack.filter(i => i.timing === timing);
+        const items = userStack.filter((i: any) => i.timing === timing);
         const count = items.length;
         if (count === 0) continue;
 
         // Check if all items for this block are taken on this specific date
         // Note: For future days (1-6), they won't have logs yet, so they will schedule normally.
-        const allTaken = items.every(item => isTaken(item.id, targetDateStr));
+        const allTaken = items.every((item: any) => isTaken(item.id, targetDateStr));
 
         if (allTaken) continue; // Smart Behavior: Cancelled/Skipped
 
@@ -118,7 +123,7 @@ export async function syncNotifications(userId: string) {
             body,
             sound: true,
           },
-          trigger: notificationTime,
+          trigger: { date: notificationTime.getTime() } as Notifications.NotificationTriggerInput,
         });
       }
     }

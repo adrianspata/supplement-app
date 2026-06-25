@@ -295,9 +295,9 @@ export default function IngestScreen() {
           serving_size: prod.serving_size || null,
           servings_per_container: prod.servings_per_container || null,
           ingredients_text: prod.ingredients_text || null,
-          vegan: prod.vegan,
-          gluten_free: prod.gluten_free,
-          dairy_free: prod.dairy_free,
+          vegan: prod.vegan ?? null,
+          gluten_free: prod.gluten_free ?? null,
+          dairy_free: prod.dairy_free ?? null,
           claims: prod.claims || [],
           data_quality_score: prod.data_quality_score || 0,
           verified_status: "draft", // Always default to draft for ingestion

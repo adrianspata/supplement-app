@@ -42,7 +42,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Elexir requires camera access to scan physical supplement packaging and labels."
+          "cameraPermission": "Basis requires camera access to scan physical supplement packaging and labels."
         }
       ],
       "expo-secure-store",
