@@ -1,4 +1,4 @@
-# Elexir
+## Elexir
 
 Personalized supplement and health companion built with React Native, Expo and Supabase.
 
@@ -43,33 +43,3 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_key
 ```bash
 npx expo start
 ```
-
-## Project Structure
-
-```text
-app/
-├── auth/
-├── product/
-├── tabs/
-├── onboarding.tsx
-└── assistant.tsx
-
-lib/
-├── supabase.ts
-├── products.ts
-├── matching.ts
-├── scoring.ts
-└── insights.ts
-```
-
-## Roadmap
-
-- Product database expansion
-- Advanced health scoring
-- Wearable integrations
-- AI health coaching
-- Habit and adherence tracking
-
-## License
-
-Private project.
